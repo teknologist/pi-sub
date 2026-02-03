@@ -470,14 +470,16 @@ export default function createExtension(pi: ExtensionAPI) {
 		theme: Theme,
 		usage: UsageSnapshot | undefined,
 		contentWidth: number,
-		message?: string
+		message?: string,
+		options?: { forceNoFill?: boolean }
 	): string[] {
 		const paddingLeft = settings.display.paddingLeft ?? 0;
 		const paddingRight = settings.display.paddingRight ?? 0;
 		const innerWidth = Math.max(1, contentWidth - paddingLeft - paddingRight);
 		const alignment = settings.display.alignment ?? "left";
-		const hasFill = settings.display.barWidth === "fill" || settings.display.dividerBlanks === "fill";
-		const wantsSplit = alignment === "split";
+		const configuredHasFill = settings.display.barWidth === "fill" || settings.display.dividerBlanks === "fill";
+		const hasFill = options?.forceNoFill ? false : configuredHasFill;
+		const wantsSplit = options?.forceNoFill ? false : alignment === "split";
 		const shouldAlign = !hasFill && !wantsSplit && (alignment === "center" || alignment === "right");
 		const baseTextColor = resolveBaseTextColor(settings.display.baseTextColor);
 		const scopedModelPatterns = loadScopedModelPatterns(ctx.cwd);
@@ -542,7 +544,11 @@ export default function createExtension(pi: ExtensionAPI) {
 			}
 			const theme = ctx.ui.theme;
 			const terminalWidth = process.stdout.columns || 80;
-			const lines = formatUsageContent(ctx, theme, usage, terminalWidth, message);
+			// In status-line placement we must not use fill-based layouts (they assume full terminal width).
+			// The Pi footer concatenates *all* extension statuses onto one line and then truncates,
+			// so we render at natural width here to avoid padding that would overflow when other
+			// status hooks are present.
+			const lines = formatUsageContent(ctx, theme, usage, terminalWidth, message, { forceNoFill: true });
 			if (lines.length === 0) {
 				ctx.ui.setStatus("sub-bar", undefined);
 				return;
