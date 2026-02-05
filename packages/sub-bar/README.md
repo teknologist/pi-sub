@@ -20,6 +20,7 @@ https://github.com/user-attachments/assets/d61d82f6-afd0-45fc-82f3-69910543aa7a
 - Auto-detects provider from current model (via sub-core)
 - Shows rate limit windows with visual progress bars
 - Status indicators from provider status pages
+- Bundled sub-core for fetching/caching (no separate install required)
 - Theme save/share/import and `sub-bar:import` preview flow
 - Provider Shown selector to pin the displayed provider
 - **Extensive settings UI** via `sub-bar:settings`
@@ -44,7 +45,7 @@ https://github.com/user-attachments/assets/d61d82f6-afd0-45fc-82f3-69910543aa7a
 | Anthropic (Claude) | 5h, Week, Extra | Extra usage label | ✅ | ✅ | Extra usage can show on/off state |
 | GitHub Copilot | Month | Model multiplier + requests left | ✅ | ✅ | Requests left uses model multiplier |
 | Google Gemini | Pro, Flash | - | ✅ | - | Quotas aggregated per model family |
-| Antigravity | Models | - | ✅ | ✅ | Sandbox Cloud Code Assist quotas |
+| Antigravity | Models | - | ✅ | ✅ | Sandbox Cloud Code Assist quotas; per-model visibility/order controls |
 | OpenAI Codex | Primary, Secondary | - | ✅ | ✅ | Credits not yet supported (PRs welcome!) |
 | AWS Kiro | Credits | - | - | - | - |
 | z.ai | Tokens, Monthly | - | - | - | API quota limits |
@@ -86,6 +87,10 @@ Alternative (no symlink): add sub-bar to `~/.pi/agent/settings.json`:
   ]
 }
 ```
+
+## Compatibility
+
+`sub-bar`/`sub-core` rely on the updated pi tool execute signature (recent pi-coding-agent builds). If you see tool execution errors on older versions of pi, upgrade pi to the latest release.
 
 ## Usage
 
