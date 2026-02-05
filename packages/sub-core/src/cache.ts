@@ -295,11 +295,13 @@ export function watchCacheUpdates(options?: CacheWatchOptions): () => void {
 	let watcher: fs.FSWatcher | undefined;
 	try {
 		watcher = fs.watch(CACHE_PATH, scheduleEmit);
+		watcher.unref?.();
 	} catch {
 		watcher = undefined;
 	}
 
 	pollTimer = setInterval(() => emitFromCache(), pollIntervalMs);
+	pollTimer.unref?.();
 
 	return () => {
 		stopped = true;

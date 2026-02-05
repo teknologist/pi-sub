@@ -28,10 +28,15 @@ export interface UsageUpdate {
 export type UsageUpdateHandler = (update: UsageUpdate) => void;
 
 export function createUsageController(deps: Dependencies) {
-	function isProviderAvailable(settings: Settings, provider: ProviderName): boolean {
+	function isProviderAvailable(
+		settings: Settings,
+		provider: ProviderName,
+		options?: { skipCredentials?: boolean }
+	): boolean {
 		const setting = settings.providers[provider];
 		if (setting.enabled === "off" || setting.enabled === false) return false;
 		if (setting.enabled === "on" || setting.enabled === true) return true;
+		if (options?.skipCredentials) return true;
 		return hasProviderCredentials(provider, deps);
 	}
 
@@ -42,10 +47,11 @@ export function createUsageController(deps: Dependencies) {
 	function resolveProvider(
 		ctx: ExtensionContext,
 		settings: Settings,
-		state: UsageControllerState
+		state: UsageControllerState,
+		options?: { skipCredentials?: boolean }
 	): ProviderName | undefined {
 		const detected = detectProviderFromModel(ctx.model);
-		if (detected && isProviderAvailable(settings, detected)) {
+		if (detected && isProviderAvailable(settings, detected, options)) {
 			return detected;
 		}
 		return undefined;
@@ -63,9 +69,9 @@ export function createUsageController(deps: Dependencies) {
 		settings: Settings,
 		state: UsageControllerState,
 		onUpdate: UsageUpdateHandler,
-		options?: { force?: boolean; allowStaleCache?: boolean; forceStatus?: boolean }
+		options?: { force?: boolean; allowStaleCache?: boolean; forceStatus?: boolean; skipFetch?: boolean }
 	): Promise<void> {
-		const provider = resolveProvider(ctx, settings, state);
+		const provider = resolveProvider(ctx, settings, state, { skipCredentials: options?.skipFetch });
 		if (!provider) {
 			state.currentProvider = undefined;
 			state.cachedUsage = undefined;
@@ -95,6 +101,10 @@ export function createUsageController(deps: Dependencies) {
 			}
 		}
 		emitUpdate(state, onUpdate);
+
+		if (options?.skipFetch) {
+			return;
+		}
 
 		const result = await fetchUsageForProvider(deps, settings, provider, options);
 		const error = result.usage?.error;
@@ -138,9 +148,9 @@ export function createUsageController(deps: Dependencies) {
 		settings: Settings,
 		state: UsageControllerState,
 		onUpdate: UsageUpdateHandler,
-		options?: { force?: boolean; allowStaleCache?: boolean }
+		options?: { force?: boolean; allowStaleCache?: boolean; skipFetch?: boolean }
 	): Promise<void> {
-		const provider = resolveProvider(ctx, settings, state);
+		const provider = resolveProvider(ctx, settings, state, { skipCredentials: options?.skipFetch });
 		if (!provider) {
 			state.currentProvider = undefined;
 			state.cachedUsage = undefined;
@@ -168,6 +178,11 @@ export function createUsageController(deps: Dependencies) {
 			if (!cachedEntry.usage.error) {
 				state.lastSuccessAt = cachedEntry.fetchedAt;
 			}
+		}
+
+		if (options?.skipFetch) {
+			emitUpdate(state, onUpdate);
+			return;
 		}
 
 		const status = await refreshStatusForProvider(deps, settings, provider, { force: options?.force });

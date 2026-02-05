@@ -10,7 +10,7 @@ import * as fs from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderName, ProviderUsageEntry, SubCoreAllState, SubCoreState, UsageSnapshot } from "./src/types.js";
-import type { Settings, BaseTextColor } from "./src/settings-types.js";
+import { getDefaultSettings, type Settings, type BaseTextColor } from "./src/settings-types.js";
 import { isBackgroundColor, resolveBaseTextColor, resolveDividerColor } from "./src/settings-types.js";
 import { buildDividerLine } from "./src/dividers.js";
 import type { CoreSettings } from "@marckrenn/pi-sub-shared";
@@ -69,6 +69,8 @@ const DEFAULT_AGENT_DIR = join(homedir(), ".pi", "agent");
 const PROJECT_SETTINGS_DIR = ".pi";
 const SETTINGS_FILE_NAME = "settings.json";
 
+let scopedModelPatternsCache: { cwd: string; patterns: string[] } | undefined;
+
 function expandTilde(value: string): string {
 	if (value === "~") return homedir();
 	if (value.startsWith("~/")) return join(homedir(), value.slice(2));
@@ -92,6 +94,10 @@ function readPiSettings(path: string): PiSettings | null {
 }
 
 function loadScopedModelPatterns(cwd: string): string[] {
+	if (scopedModelPatternsCache?.cwd === cwd) {
+		return scopedModelPatternsCache.patterns;
+	}
+
 	const globalSettings = readPiSettings(resolveAgentSettingsPath());
 	const projectSettingsPath = join(cwd, PROJECT_SETTINGS_DIR, SETTINGS_FILE_NAME);
 	const projectSettings = readPiSettings(projectSettingsPath);
@@ -106,8 +112,11 @@ function loadScopedModelPatterns(cwd: string): string[] {
 			: [];
 	}
 
-	if (!enabledModels || enabledModels.length === 0) return [];
-	return enabledModels.filter((value) => typeof value === "string");
+	const patterns = !enabledModels || enabledModels.length === 0
+		? []
+		: enabledModels.filter((value) => typeof value === "string");
+	scopedModelPatternsCache = { cwd, patterns };
+	return patterns;
 }
 
 /**
@@ -115,7 +124,8 @@ function loadScopedModelPatterns(cwd: string): string[] {
  */
 export default function createExtension(pi: ExtensionAPI) {
 	let lastContext: ExtensionContext | undefined;
-	let settings: Settings = loadSettings();
+	let settings: Settings = getDefaultSettings();
+	let uiEnabled = true;
 	let currentUsage: UsageSnapshot | undefined;
 	let usageEntries: Partial<Record<ProviderName, UsageSnapshot>> = {};
 	let coreAvailable = false;
@@ -180,7 +190,6 @@ export default function createExtension(pi: ExtensionAPI) {
 		}
 	}
 
-	void ensureSubCoreLoaded();
 
 	async function promptImportAction(ctx: ExtensionContext): Promise<"save-apply" | "save" | "cancel"> {
 		return new Promise((resolve) => {
@@ -431,25 +440,32 @@ export default function createExtension(pi: ExtensionAPI) {
 	function startSettingsWatch(): void {
 		if (settingsWatchStarted) return;
 		settingsWatchStarted = true;
-		const content = readSettingsFile();
-		if (content) {
-			settingsSnapshot = content;
-			try {
-				const stat = fs.statSync(SETTINGS_PATH, { throwIfNoEntry: false });
-				if (stat?.mtimeMs) settingsMtimeMs = stat.mtimeMs;
-			} catch {
-				// Ignore
+		if (!settingsSnapshot) {
+			const content = readSettingsFile();
+			if (content) {
+				settingsSnapshot = content;
+				try {
+					const stat = fs.statSync(SETTINGS_PATH, { throwIfNoEntry: false });
+					if (stat?.mtimeMs) settingsMtimeMs = stat.mtimeMs;
+				} catch {
+					// Ignore
+				}
 			}
 		}
 		try {
 			settingsWatcher = fs.watch(SETTINGS_PATH, scheduleSettingsRefresh);
+			settingsWatcher.unref?.();
 		} catch {
 			settingsWatcher = undefined;
 		}
 		settingsPoll = setInterval(() => checkSettingsFile(), 2000);
+		settingsPoll.unref?.();
 	}
 
 	function renderUsageWidget(ctx: ExtensionContext, usage: UsageSnapshot | undefined, message?: string): void {
+		if (!ctx.hasUI || !uiEnabled) {
+			return;
+		}
 		if (!usage && !message) {
 			ctx.ui.setWidget("usage", undefined);
 			return;
@@ -595,6 +611,13 @@ export default function createExtension(pi: ExtensionAPI) {
 	}
 
 	function updateFetchFailureTicker(): void {
+		if (!uiEnabled) {
+			if (fetchFailureTimer) {
+				clearInterval(fetchFailureTimer);
+				fetchFailureTimer = undefined;
+			}
+			return;
+		}
 		const usage = resolveDisplayedUsage();
 		const shouldTick = Boolean(usage?.error && usage.lastSuccessAt);
 		if (shouldTick && !fetchFailureTimer) {
@@ -602,6 +625,7 @@ export default function createExtension(pi: ExtensionAPI) {
 				if (!lastContext) return;
 				renderCurrent(lastContext);
 			}, 60000);
+			fetchFailureTimer.unref?.();
 		}
 		if (!shouldTick && fetchFailureTimer) {
 			clearInterval(fetchFailureTimer);
@@ -902,37 +926,57 @@ export default function createExtension(pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		lastContext = ctx;
+		uiEnabled = ctx.hasUI;
+		if (!uiEnabled) {
+			return;
+		}
 		settings = loadSettings();
 		coreSettings = getFallbackCoreSettings(settings);
-		const content = readSettingsFile();
-		if (content) {
-			settingsSnapshot = content;
-			try {
-				const stat = fs.statSync(SETTINGS_PATH, { throwIfNoEntry: false });
-				if (stat?.mtimeMs) settingsMtimeMs = stat.mtimeMs;
-			} catch {
-				// Ignore
-			}
-		}
-		const state = await requestCoreState();
-		if (state) {
-			coreAvailable = true;
-			updateUsage(state.usage);
-			if (settings.pinnedProvider) {
-				const entries = await requestCoreEntries();
-				updateEntries(entries);
-				if (lastContext) {
-					renderCurrent(lastContext);
+		if (!settingsSnapshot) {
+			const content = readSettingsFile();
+			if (content) {
+				settingsSnapshot = content;
+				try {
+					const stat = fs.statSync(SETTINGS_PATH, { throwIfNoEntry: false });
+					if (stat?.mtimeMs) settingsMtimeMs = stat.mtimeMs;
+				} catch {
+					// Ignore
 				}
 			}
-		} else if (lastContext) {
-			coreAvailable = false;
-			renderCurrent(lastContext);
 		}
+
+		const watchTimer = setTimeout(() => startSettingsWatch(), 0);
+		watchTimer.unref?.();
+
+		const sessionContext = ctx;
+		void (async () => {
+			await ensureSubCoreLoaded();
+			if (!lastContext || lastContext !== sessionContext || !uiEnabled) return;
+			const state = await requestCoreState();
+			if (!lastContext || lastContext !== sessionContext || !uiEnabled) return;
+			if (state) {
+				coreAvailable = true;
+				updateUsage(state.usage);
+				if (settings.pinnedProvider) {
+					const entries = await requestCoreEntries();
+					if (!lastContext || lastContext !== sessionContext || !uiEnabled) return;
+					updateEntries(entries);
+					if (lastContext) {
+						renderCurrent(lastContext);
+					}
+				}
+			} else if (lastContext && !coreAvailable) {
+				coreAvailable = false;
+				renderCurrent(lastContext);
+			}
+		})();
 	});
 
 	pi.on("model_select" as unknown as "session_start", async (_event: unknown, ctx: ExtensionContext) => {
 		lastContext = ctx;
+		if (!uiEnabled || !ctx.hasUI) {
+			return;
+		}
 		if (currentUsage) {
 			renderUsageWidget(ctx, currentUsage);
 		}
@@ -946,5 +990,4 @@ export default function createExtension(pi: ExtensionAPI) {
 		}
 	});
 
-	startSettingsWatch();
 }

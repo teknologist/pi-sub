@@ -5,7 +5,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import type { Dependencies, ProviderName, SubCoreState, UsageSnapshot } from "./src/types.js";
-import type { Settings } from "./src/settings-types.js";
+import { getDefaultSettings, type Settings } from "./src/settings-types.js";
 import type { ProviderUsageEntry } from "./src/usage/types.js";
 import { createDefaultDependencies } from "./src/dependencies.js";
 import { createUsageController, type UsageUpdate } from "./src/usage/controller.js";
@@ -85,8 +85,11 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 	let lastContext: ExtensionContext | undefined;
 	let lastUsageRefreshAt = 0;
 	let lastStatusRefreshAt = 0;
-	let settings: Settings = loadSettings();
+	let settings: Settings = getDefaultSettings();
+	let settingsLoaded = false;
+	let toolsRegistered = false;
 	let lastState: SubCoreState = {};
+	let shouldSkipNextModelSelectFetch = true;
 
 	const controller = createUsageController(deps);
 	const controllerState = {
@@ -133,31 +136,51 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 		emitCurrentUpdate(controllerState.currentProvider, usage);
 	});
 
-	const stopCacheWatch = watchCacheUpdates();
+	let stopCacheWatch: (() => void) | undefined;
+	let cacheWatchStarted = false;
+
+	const startCacheWatch = (): void => {
+		if (cacheWatchStarted) return;
+		cacheWatchStarted = true;
+		stopCacheWatch = watchCacheUpdates();
+	};
 
 	function emitUpdate(update: UsageUpdate): void {
 		emitCurrentUpdate(update.provider, update.usage);
 	}
 
-	async function refresh(ctx: ExtensionContext, options?: { force?: boolean; allowStaleCache?: boolean }) {
+	async function refresh(
+		ctx: ExtensionContext,
+		options?: { force?: boolean; allowStaleCache?: boolean; skipFetch?: boolean }
+	) {
 		lastContext = ctx;
+		ensureSettingsLoaded();
 		try {
 			await controller.refresh(ctx, settings, controllerState, emitUpdate, options);
 		} finally {
-			lastUsageRefreshAt = Date.now();
+			if (!options?.skipFetch) {
+				lastUsageRefreshAt = Date.now();
+			}
 		}
 	}
 
-	async function refreshStatus(ctx: ExtensionContext, options?: { force?: boolean; allowStaleCache?: boolean }) {
+	async function refreshStatus(
+		ctx: ExtensionContext,
+		options?: { force?: boolean; allowStaleCache?: boolean; skipFetch?: boolean }
+	) {
 		lastContext = ctx;
+		ensureSettingsLoaded();
 		try {
 			await controller.refreshStatus(ctx, settings, controllerState, emitUpdate, options);
 		} finally {
-			lastStatusRefreshAt = Date.now();
+			if (!options?.skipFetch) {
+				lastStatusRefreshAt = Date.now();
+			}
 		}
 	}
 
 	async function cycleProvider(ctx: ExtensionContext): Promise<void> {
+		ensureSettingsLoaded();
 		await controller.cycleProvider(ctx, settings, controllerState, emitUpdate);
 	}
 
@@ -181,6 +204,7 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 					void refresh(lastContext);
 				}
 			}, usageTickMs);
+			usageRefreshInterval.unref?.();
 		}
 
 		const statusIntervalMs = settings.statusRefresh.refreshInterval * 1000;
@@ -193,10 +217,12 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 					void refreshStatus(lastContext);
 				}
 			}, statusTickMs);
+			statusRefreshInterval.unref?.();
 		}
 	}
 
 	function applySettingsPatch(patch: Partial<Settings>): void {
+		ensureSettingsLoaded();
 		settings = deepMerge(settings, patch);
 		saveSettings(settings);
 		setupRefreshInterval();
@@ -204,6 +230,7 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 	}
 
 	async function getEntries(force?: boolean): Promise<ProviderUsageEntry[]> {
+		ensureSettingsLoaded();
 		const enabledProviders = controller.getEnabledProviders(settings);
 		if (enabledProviders.length === 0) return [];
 		if (force) {
@@ -255,22 +282,37 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 		});
 	};
 
-	const usageToolEnabled = settings.tools?.usageTool ?? false;
-	const allUsageToolEnabled = settings.tools?.allUsageTool ?? false;
+	function registerToolsFromSettings(nextSettings: Settings): void {
+		if (toolsRegistered) return;
+		const usageToolEnabled = nextSettings.tools?.usageTool ?? false;
+		const allUsageToolEnabled = nextSettings.tools?.allUsageTool ?? false;
 
-	if (usageToolEnabled) {
-		for (const name of TOOL_NAMES.usage) {
-			registerUsageTool(name);
+		if (usageToolEnabled) {
+			for (const name of TOOL_NAMES.usage) {
+				registerUsageTool(name);
+			}
 		}
+		if (allUsageToolEnabled) {
+			for (const name of TOOL_NAMES.allUsage) {
+				registerAllUsageTool(name);
+			}
+		}
+		toolsRegistered = true;
 	}
-	if (allUsageToolEnabled) {
-		for (const name of TOOL_NAMES.allUsage) {
-			registerAllUsageTool(name);
-		}
+
+	function ensureSettingsLoaded(): void {
+		if (settingsLoaded) return;
+		settings = loadSettings();
+		settingsLoaded = true;
+		registerToolsFromSettings(settings);
+		setupRefreshInterval();
+		const watchTimer = setTimeout(() => startCacheWatch(), 0);
+		watchTimer.unref?.();
 	}
 	pi.registerCommand("sub-core:settings", {
 		description: "Open sub-core settings",
 		handler: async (_args, ctx) => {
+			ensureSettingsLoaded();
 			const handleSettingsChange = async (updatedSettings: Settings) => {
 				applySettingsPatch(updatedSettings);
 				if (lastContext) {
@@ -288,6 +330,7 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 	});
 
 	pi.events.on("sub-core:request", async (payload) => {
+		ensureSettingsLoaded();
 		const request = payload as SubCoreRequest;
 		if (request.type === "entries") {
 			const entries = await getEntries(request.force);
@@ -327,10 +370,10 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 
 	pi.on("session_start", async (_event, ctx) => {
 		lastContext = ctx;
-		settings = loadSettings();
-		setupRefreshInterval();
-		void refresh(ctx, { force: true, allowStaleCache: true });
-		void refreshStatus(ctx, { force: true, allowStaleCache: true });
+		shouldSkipNextModelSelectFetch = true;
+		ensureSettingsLoaded();
+		void refresh(ctx, { allowStaleCache: true, skipFetch: true });
+		void refreshStatus(ctx, { allowStaleCache: true, skipFetch: true });
 		pi.events.emit("sub-core:ready", { state: lastState, settings });
 	});
 
@@ -373,6 +416,12 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 	pi.on("model_select" as unknown as "session_start", async (_event: unknown, ctx: ExtensionContext) => {
 		controllerState.currentProvider = undefined;
 		controllerState.cachedUsage = undefined;
+		if (shouldSkipNextModelSelectFetch) {
+			shouldSkipNextModelSelectFetch = false;
+			void refresh(ctx, { allowStaleCache: true, skipFetch: true });
+			void refreshStatus(ctx, { allowStaleCache: true, skipFetch: true });
+			return;
+		}
 		void refresh(ctx, { force: true, allowStaleCache: true });
 		void refreshStatus(ctx, { force: true, allowStaleCache: true });
 	});
@@ -388,7 +437,9 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 		}
 		unsubscribeCache();
 		unsubscribeCacheSnapshot();
-		stopCacheWatch();
+		stopCacheWatch?.();
+		stopCacheWatch = undefined;
+		cacheWatchStarted = false;
 		lastContext = undefined;
 		subCoreGlobal.__piSubCore = undefined;
 	});
