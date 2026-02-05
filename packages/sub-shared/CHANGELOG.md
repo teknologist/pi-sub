@@ -1,5 +1,11 @@
 # @marckrenn/pi-sub-shared
 
+## 1.0.5
+
+### Patch Changes
+
+- [#35](https://github.com/marckrenn/pi-sub/pull/35) [`59e2b45`](https://github.com/marckrenn/pi-sub/commit/59e2b456e0e5c41479dccedcef93f9175cc4aa55) Thanks [@marckrenn](https://github.com/marckrenn)! - Improve startup responsiveness by deferring refreshes and watchers, skipping headless UI work, and unref-ing long-lived timers so pi CLI commands exit cleanly.
+
 ## 1.0.4
 
 ### Patch Changes
