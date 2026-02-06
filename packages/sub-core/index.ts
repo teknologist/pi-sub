@@ -4,6 +4,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import * as fs from "node:fs";
 import type { Dependencies, ProviderName, SubCoreState, UsageSnapshot } from "./src/types.js";
 import { getDefaultSettings, type Settings } from "./src/settings-types.js";
 import type { ProviderUsageEntry } from "./src/usage/types.js";
@@ -13,7 +14,7 @@ import { fetchUsageEntries, getCachedUsageEntries } from "./src/usage/fetch.js";
 import { onCacheSnapshot, onCacheUpdate, watchCacheUpdates, type Cache } from "./src/cache.js";
 import { isExpectedMissingData } from "./src/errors.js";
 import { getStorage } from "./src/storage.js";
-import { loadSettings, saveSettings } from "./src/settings.js";
+import { clearSettingsCache, loadSettings, saveSettings, SETTINGS_PATH } from "./src/settings.js";
 import { showSettingsUI } from "./src/settings-ui.js";
 
 type SubCoreRequest =
@@ -90,6 +91,12 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 	let toolsRegistered = false;
 	let lastState: SubCoreState = {};
 	let shouldSkipNextModelSelectFetch = true;
+	let settingsSnapshot = "";
+	let settingsMtimeMs = 0;
+	let settingsDebounce: NodeJS.Timeout | undefined;
+	let settingsWatcher: fs.FSWatcher | undefined;
+	let settingsPoll: NodeJS.Timeout | undefined;
+	let settingsWatchStarted = false;
 
 	const controller = createUsageController(deps);
 	const controllerState = {
@@ -229,6 +236,80 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 		pi.events.emit("sub-core:settings:updated", { settings });
 	}
 
+	function readSettingsFile(): string | undefined {
+		try {
+			return fs.readFileSync(SETTINGS_PATH, "utf-8");
+		} catch {
+			return undefined;
+		}
+	}
+
+	function applySettingsFromDisk(): void {
+		clearSettingsCache();
+		settings = loadSettings();
+		registerToolsFromSettings(settings);
+		setupRefreshInterval();
+		pi.events.emit("sub-core:settings:updated", { settings });
+		if (lastContext) {
+			void refresh(lastContext, { allowStaleCache: true, skipFetch: true });
+			void refreshStatus(lastContext, { allowStaleCache: true, skipFetch: true });
+		}
+	}
+
+	function refreshSettingsSnapshot(): void {
+		const content = readSettingsFile();
+		if (!content || content === settingsSnapshot) return;
+		try {
+			JSON.parse(content);
+		} catch {
+			return;
+		}
+		settingsSnapshot = content;
+		applySettingsFromDisk();
+	}
+
+	function checkSettingsFile(): void {
+		try {
+			const stat = fs.statSync(SETTINGS_PATH, { throwIfNoEntry: false });
+			if (!stat || !stat.mtimeMs) return;
+			if (stat.mtimeMs === settingsMtimeMs) return;
+			settingsMtimeMs = stat.mtimeMs;
+			refreshSettingsSnapshot();
+		} catch {
+			// Ignore missing files
+		}
+	}
+
+	function scheduleSettingsRefresh(): void {
+		if (settingsDebounce) clearTimeout(settingsDebounce);
+		settingsDebounce = setTimeout(() => checkSettingsFile(), 200);
+	}
+
+	function startSettingsWatch(): void {
+		if (settingsWatchStarted) return;
+		settingsWatchStarted = true;
+		if (!settingsSnapshot) {
+			const content = readSettingsFile();
+			if (content) {
+				settingsSnapshot = content;
+				try {
+					const stat = fs.statSync(SETTINGS_PATH, { throwIfNoEntry: false });
+					if (stat?.mtimeMs) settingsMtimeMs = stat.mtimeMs;
+				} catch {
+					// Ignore
+				}
+			}
+		}
+		try {
+			settingsWatcher = fs.watch(SETTINGS_PATH, scheduleSettingsRefresh);
+			settingsWatcher.unref?.();
+		} catch {
+			settingsWatcher = undefined;
+		}
+		settingsPoll = setInterval(() => checkSettingsFile(), 2000);
+		settingsPoll.unref?.();
+	}
+
 	async function getEntries(force?: boolean): Promise<ProviderUsageEntry[]> {
 		ensureSettingsLoaded();
 		const enabledProviders = controller.getEnabledProviders(settings);
@@ -306,7 +387,10 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 		settingsLoaded = true;
 		registerToolsFromSettings(settings);
 		setupRefreshInterval();
-		const watchTimer = setTimeout(() => startCacheWatch(), 0);
+		const watchTimer = setTimeout(() => {
+			startCacheWatch();
+			startSettingsWatch();
+		}, 0);
 		watchTimer.unref?.();
 	}
 	pi.registerCommand("sub-core:settings", {
@@ -435,6 +519,19 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 			clearInterval(statusRefreshInterval);
 			statusRefreshInterval = undefined;
 		}
+		if (settingsDebounce) {
+			clearTimeout(settingsDebounce);
+			settingsDebounce = undefined;
+		}
+		if (settingsPoll) {
+			clearInterval(settingsPoll);
+			settingsPoll = undefined;
+		}
+		settingsWatcher?.close();
+		settingsWatcher = undefined;
+		settingsWatchStarted = false;
+		settingsSnapshot = "";
+		settingsMtimeMs = 0;
 		unsubscribeCache();
 		unsubscribeCacheSnapshot();
 		stopCacheWatch?.();

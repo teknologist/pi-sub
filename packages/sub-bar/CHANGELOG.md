@@ -1,5 +1,17 @@
 # @marckrenn/pi-sub-bar
 
+## 1.0.6
+
+### Patch Changes
+
+- Remove `bundleDependencies`/`bundledDependencies` from `@marckrenn/pi-sub-bar` to fix `npm install -g @marckrenn/pi-sub-bar` failing with `protobufjs` postinstall (missing `scripts/postinstall.js`) on Node 24+/npm.
+
+  Also include a second extension path (`../pi-sub-core/index.ts`) so `sub-core` is discovered whether npm installs `@marckrenn/pi-sub-core` nested or hoisted, restoring `/sub-core:settings`.
+
+- Updated dependencies []:
+  - @marckrenn/pi-sub-core@1.0.6
+  - @marckrenn/pi-sub-shared@1.0.6
+
 ## 1.0.5
 
 ### Patch Changes
