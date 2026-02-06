@@ -1,6 +1,6 @@
 {
   "name": "@marckrenn/pi-sub-bar",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Usage widget extension for pi-coding-agent - shows current provider usage above the editor",
   "keywords": [
     "pi-package"
@@ -14,15 +14,15 @@
   "pi": {
     "extensions": [
       "./index.ts",
-      "node_modules/@marckrenn/pi-sub-core/index.ts"
+      "node_modules/@marckrenn/pi-sub-core/index.ts",
+      "../pi-sub-core/index.ts"
     ]
   },
   "scripts": {
     "check": "tsc --noEmit",
     "check:watch": "tsc --noEmit --watch",
     "test": "tsx test/all.test.ts",
-    "test:watch": "tsx watch test/all.test.ts",
-    "prepack": "npm install --workspaces=false --omit=dev --no-package-lock"
+    "test:watch": "tsx watch test/all.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -30,16 +30,10 @@
     "typescript": "^5.8.0"
   },
   "dependencies": {
-    "@marckrenn/pi-sub-core": "^1.0.5",
-    "@marckrenn/pi-sub-shared": "^1.0.5"
+    "@marckrenn/pi-sub-core": "^1.0.6",
+    "@marckrenn/pi-sub-shared": "^1.0.6"
   },
-  "bundledDependencies": [
-    "@marckrenn/pi-sub-core"
-  ],
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*"
-  },
-  "bundleDependencies": [
-    "@marckrenn/pi-sub-core"
-  ]
+  }
 }

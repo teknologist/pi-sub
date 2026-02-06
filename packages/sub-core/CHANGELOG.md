@@ -1,5 +1,14 @@
 # @marckrenn/pi-sub-core
 
+## 1.0.6
+
+### Patch Changes
+
+- Watch `~/.pi/agent/pi-sub-core-settings.json` for changes and hot-reload settings (with `fs.watch` + polling fallback).
+
+- Updated dependencies []:
+  - @marckrenn/pi-sub-shared@1.0.6
+
 ## 1.0.5
 
 ### Patch Changes
