@@ -19,6 +19,41 @@ function assertWindow(usage: UsageSnapshot, label: string): void {
 	assert.ok(found, `Expected window ${label}`);
 }
 
+test("anthropic reads token from ANTHROPIC_OAUTH_TOKEN env var", async () => {
+	const provider = new AnthropicProvider();
+	let authorization: string | undefined;
+
+	const { deps } = createDeps({
+		env: { ANTHROPIC_OAUTH_TOKEN: "env-token" },
+		fetch: async (_url, init) => {
+			authorization = (init as any)?.headers?.Authorization;
+			return createJsonResponse({});
+		},
+		execFileSync: () => "",
+	});
+
+	await provider.fetchUsage(deps);
+	assert.equal(authorization, "Bearer env-token");
+});
+
+test("anthropic env token overrides auth.json", async () => {
+	const provider = new AnthropicProvider();
+	let authorization: string | undefined;
+
+	const { deps, files } = createDeps({
+		env: { ANTHROPIC_OAUTH_TOKEN: "env-token" },
+		fetch: async (_url, init) => {
+			authorization = (init as any)?.headers?.Authorization;
+			return createJsonResponse({});
+		},
+		execFileSync: () => "",
+	});
+	withAuth(files, { anthropic: { access: "file-token" } }, deps.homedir());
+
+	await provider.fetchUsage(deps);
+	assert.equal(authorization, "Bearer env-token");
+});
+
 test("anthropic parses windows and extra usage", async () => {
 	const provider = new AnthropicProvider();
 	const { deps, files } = createDeps({
@@ -37,6 +72,96 @@ test("anthropic parses windows and extra usage", async () => {
 	const extra = usage.windows.find((window) => window.label.startsWith("Extra"));
 	assert.ok(extra?.label.includes("Extra [active]"));
 	assert.equal(usage.extraUsageEnabled, true);
+});
+
+test("copilot reads token from GITHUB_TOKEN env var", async () => {
+	const provider = new CopilotProvider();
+	let authorization: string | undefined;
+
+	const { deps } = createDeps({
+		env: { GITHUB_TOKEN: "gh-token" },
+		fetch: async (_url, init) => {
+			authorization = (init as any)?.headers?.Authorization;
+			return createJsonResponse({});
+		},
+	});
+
+	await provider.fetchUsage(deps);
+	assert.equal(authorization, "token gh-token");
+});
+
+test("gemini reads token from GOOGLE_GEMINI_CLI_OAUTH_TOKEN env var", async () => {
+	const provider = new GeminiProvider();
+	let authorization: string | undefined;
+
+	const { deps } = createDeps({
+		env: { GOOGLE_GEMINI_CLI_OAUTH_TOKEN: "g-token" },
+		fetch: async (_url, init) => {
+			authorization = (init as any)?.headers?.Authorization;
+			return createJsonResponse({ buckets: [] });
+		},
+	});
+
+	await provider.fetchUsage(deps);
+	assert.equal(authorization, "Bearer g-token");
+});
+
+test("antigravity reads token from GOOGLE_ANTIGRAVITY_OAUTH_TOKEN env var", async () => {
+	const provider = new AntigravityProvider();
+	let authorization: string | undefined;
+
+	const { deps } = createDeps({
+		env: { GOOGLE_ANTIGRAVITY_OAUTH_TOKEN: "ag-token" },
+		fetch: async (_url, init) => {
+			authorization = (init as any)?.headers?.Authorization;
+			return createJsonResponse({ models: {} });
+		},
+	});
+
+	await provider.fetchUsage(deps);
+	assert.equal(authorization, "Bearer ag-token");
+});
+
+test("codex reads token from OPENAI_CODEX_OAUTH_TOKEN env var", async () => {
+	const provider = new CodexProvider();
+	let authorization: string | undefined;
+	let accountIdHeader: string | undefined;
+
+	const { deps } = createDeps({
+		env: { OPENAI_CODEX_OAUTH_TOKEN: "c-token", OPENAI_CODEX_ACCOUNT_ID: "acct_123" },
+		fetch: async (_url, init) => {
+			authorization = (init as any)?.headers?.Authorization;
+			accountIdHeader = (init as any)?.headers?.["ChatGPT-Account-Id"];
+			return createJsonResponse({
+				rate_limit: {
+					primary_window: { reset_at: Math.floor(Date.now() / 1000) + 3600, limit_window_seconds: 10800, used_percent: 12 },
+					secondary_window: { reset_at: Math.floor(Date.now() / 1000) + 86400, limit_window_seconds: 86400, used_percent: 34 },
+				},
+			});
+		},
+	});
+
+	const usage = await provider.fetchUsage(deps);
+	assert.equal(authorization, "Bearer c-token");
+	assert.equal(accountIdHeader, "acct_123");
+	assertWindow(usage, "3h");
+	assertWindow(usage, "Day");
+});
+
+test("zai reads token from ZAI_API_KEY env var", async () => {
+	const provider = new ZaiProvider();
+	let authorization: string | undefined;
+
+	const { deps } = createDeps({
+		env: { ZAI_API_KEY: "z-token" },
+		fetch: async (_url, init) => {
+			authorization = (init as any)?.headers?.Authorization;
+			return createJsonResponse({ success: true, code: 200, data: { limits: [] } });
+		},
+	});
+
+	await provider.fetchUsage(deps);
+	assert.equal(authorization, "Bearer z-token");
 });
 
 test("copilot handles missing quota snapshots", async () => {

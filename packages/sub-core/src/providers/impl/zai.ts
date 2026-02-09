@@ -14,6 +14,9 @@ import { API_TIMEOUT_MS } from "../../config.js";
  */
 function loadZaiApiKey(deps: Dependencies): string | undefined {
 	// Try environment variable first
+	if (deps.env.ZAI_API_KEY) {
+		return deps.env.ZAI_API_KEY;
+	}
 	if (deps.env.Z_AI_API_KEY) {
 		return deps.env.Z_AI_API_KEY;
 	}

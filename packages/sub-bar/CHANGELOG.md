@@ -1,5 +1,17 @@
 # @marckrenn/pi-sub-bar
 
+## 1.1.0
+
+### Minor Changes
+
+- [`e9c1c39`](https://github.com/marckrenn/pi-sub/commit/e9c1c394286b302e018c2c824d16978b2b4d3d44) Thanks [@plesiv](https://github.com/plesiv)! - Make keybindings configurable
+
+### Patch Changes
+
+- Updated dependencies [[`7ce2a92`](https://github.com/marckrenn/pi-sub/commit/7ce2a92b15e766fd85a4b7eb85d6fc5c5aa32dca)]:
+  - @marckrenn/pi-sub-core@1.1.0
+  - @marckrenn/pi-sub-shared@1.1.0
+
 ## 1.0.6
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @marckrenn/pi-sub-core
 
+## 1.1.0
+
+### Patch Changes
+
+- [`7ce2a92`](https://github.com/marckrenn/pi-sub/commit/7ce2a92b15e766fd85a4b7eb85d6fc5c5aa32dca) Thanks [@marckrenn](https://github.com/marckrenn)! - Support providing credentials via environment variables for the usage providers (Anthropic, Copilot, Gemini, Antigravity, Codex, z.ai).
+
+- Updated dependencies []:
+  - @marckrenn/pi-sub-shared@1.1.0
+
 ## 1.0.6
 
 ### Patch Changes

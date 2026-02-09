@@ -13,6 +13,15 @@ import { API_TIMEOUT_MS } from "../../config.js";
  * Load Gemini access token from various sources
  */
 function loadGeminiToken(deps: Dependencies): string | undefined {
+	// Explicit override via env var
+	const envToken = (
+		deps.env.GOOGLE_GEMINI_CLI_OAUTH_TOKEN ||
+		deps.env.GOOGLE_GEMINI_CLI_ACCESS_TOKEN ||
+		deps.env.GEMINI_OAUTH_TOKEN ||
+		deps.env.GOOGLE_GEMINI_OAUTH_TOKEN
+	)?.trim();
+	if (envToken) return envToken;
+
 	// Try pi auth.json first
 	const piAuthPath = path.join(deps.homedir(), ".pi", "agent", "auth.json");
 	try {

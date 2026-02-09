@@ -40,6 +40,7 @@ function parseSettings(content: string): Settings {
 		displayThemes: loaded.displayThemes,
 		displayUserTheme: loaded.displayUserTheme,
 		pinnedProvider: loaded.pinnedProvider,
+		keybindings: loaded.keybindings,
 	} as Partial<Settings>);
 }
 
@@ -108,6 +109,7 @@ export function saveSettings(settings: Settings): boolean {
 				const themesChanged = JSON.stringify(settings.displayThemes) !== JSON.stringify(cachedSettings.displayThemes);
 				const userThemeChanged = JSON.stringify(settings.displayUserTheme) !== JSON.stringify(cachedSettings.displayUserTheme);
 				const pinnedChanged = settings.pinnedProvider !== cachedSettings.pinnedProvider;
+				const keybindingsChanged = JSON.stringify(settings.keybindings) !== JSON.stringify(cachedSettings.keybindings);
 
 				next = {
 					...diskSettings,
@@ -117,6 +119,7 @@ export function saveSettings(settings: Settings): boolean {
 					displayThemes: themesChanged ? settings.displayThemes : diskSettings.displayThemes,
 					displayUserTheme: userThemeChanged ? settings.displayUserTheme : diskSettings.displayUserTheme,
 					pinnedProvider: pinnedChanged ? settings.pinnedProvider : diskSettings.pinnedProvider,
+					keybindings: keybindingsChanged ? settings.keybindings : diskSettings.keybindings,
 				};
 			}
 		}
@@ -127,6 +130,7 @@ export function saveSettings(settings: Settings): boolean {
 			displayThemes: next.displayThemes,
 			displayUserTheme: next.displayUserTheme,
 			pinnedProvider: next.pinnedProvider,
+			keybindings: next.keybindings,
 		}, null, 2);
 		storage.writeFile(SETTINGS_PATH, content);
 		cachedSettings = next;
@@ -150,6 +154,7 @@ export function resetSettings(): Settings {
 		displayThemes: defaults.displayThemes,
 		displayUserTheme: defaults.displayUserTheme,
 		pinnedProvider: defaults.pinnedProvider,
+		keybindings: defaults.keybindings,
 		version: defaults.version,
 	};
 	saveSettings(next);

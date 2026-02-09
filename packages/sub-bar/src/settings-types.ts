@@ -267,6 +267,19 @@ export interface ProviderSettingsMap {
 export type { BehaviorSettings, CoreSettings } from "@marckrenn/pi-sub-shared";
 
 /**
+ * Keybinding settings.
+ * Values are key-combo strings accepted by pi's registerShortcut (e.g. "ctrl+alt+p").
+ * Use "none" to disable a shortcut.
+ * Changes take effect after pi restart.
+ */
+export interface KeybindingSettings {
+	/** Shortcut to cycle through providers */
+	cycleProvider: string;
+	/** Shortcut to toggle reset timer format */
+	toggleResetFormat: string;
+}
+
+/**
  * Display settings
  */
 export interface DisplaySettings {
@@ -378,6 +391,8 @@ export interface Settings extends Omit<CoreSettings, "providers"> {
 	displayUserTheme: DisplaySettings | null;
 	/** Pinned provider override for display */
 	pinnedProvider: ProviderName | null;
+	/** Keybinding settings (changes require pi restart) */
+	keybindings: KeybindingSettings;
 }
 
 /**
@@ -501,6 +516,11 @@ export function getDefaultSettings(): Settings {
 		displayThemes: [],
 		displayUserTheme: null,
 		pinnedProvider: null,
+
+		keybindings: {
+			cycleProvider: "ctrl+alt+p",
+			toggleResetFormat: "ctrl+alt+r",
+		},
 
 		behavior: {
 			refreshInterval: 60,

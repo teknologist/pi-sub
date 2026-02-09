@@ -94,8 +94,12 @@ The extension loads automatically. Use:
 - `sub-bar:settings` - Open display + provider UI settings (includes Provider Shown)
 - `sub-bar:import <share string>` - Preview a shared theme and choose to save/apply
 - `sub-core:settings` - Configure provider enablement/order + usage/status refresh settings
-- `Ctrl+Alt+P` - Cycle through available providers
-- `Ctrl+Alt+R` - Toggle reset timer format (relative vs datetime)
+- `Ctrl+Alt+P` - Cycle through available providers (configurable)
+- `Ctrl+Alt+R` - Toggle reset timer format (configurable)
+
+**Keybindings:**
+
+Shortcuts are configurable via `sub-bar:settings` → Keybindings. Enter any valid key combo (e.g. `ctrl+alt+p`, `ctrl+shift+s`) or `none` to disable a shortcut. Keybinding changes take effect after pi restart.
 
 **Caching:**
 - Handled by sub-core at `~/.pi/agent/cache/sub-core/cache.json`

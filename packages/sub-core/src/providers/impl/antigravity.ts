@@ -58,6 +58,27 @@ interface ParsedModelQuota {
  * Load Antigravity access token from auth.json
  */
 function loadAntigravityAuth(deps: Dependencies): AntigravityAuth | undefined {
+	// Explicit override via env var
+	const envProjectId = (deps.env.GOOGLE_ANTIGRAVITY_PROJECT_ID || deps.env.GOOGLE_ANTIGRAVITY_PROJECT)?.trim();
+	const envToken = (deps.env.GOOGLE_ANTIGRAVITY_OAUTH_TOKEN || deps.env.ANTIGRAVITY_OAUTH_TOKEN)?.trim();
+	if (envToken) {
+		return { token: envToken, projectId: envProjectId || undefined };
+	}
+
+	// Also support passing pi-ai style JSON api key: { token, projectId }
+	const envApiKey = (deps.env.GOOGLE_ANTIGRAVITY_API_KEY || deps.env.ANTIGRAVITY_API_KEY)?.trim();
+	if (envApiKey) {
+		try {
+			const parsed = JSON.parse(envApiKey) as { token?: string; projectId?: string };
+			if (parsed?.token) {
+				return { token: parsed.token, projectId: parsed.projectId || envProjectId || undefined };
+			}
+		} catch {
+			// not JSON
+		}
+		return { token: envApiKey, projectId: envProjectId || undefined };
+	}
+
 	const piAuthPath = path.join(deps.homedir(), ".pi", "agent", "auth.json");
 	try {
 		if (deps.fileExists(piAuthPath)) {

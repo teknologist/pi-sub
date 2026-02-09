@@ -14,6 +14,18 @@ import { API_TIMEOUT_MS } from "../../config.js";
  * First tries pi's auth.json, then falls back to legacy codex location
  */
 function loadCodexCredentials(deps: Dependencies): { accessToken?: string; accountId?: string } {
+	// Explicit override via env var
+	const envAccessToken = (
+		deps.env.OPENAI_CODEX_OAUTH_TOKEN ||
+		deps.env.OPENAI_CODEX_ACCESS_TOKEN ||
+		deps.env.CODEX_OAUTH_TOKEN ||
+		deps.env.CODEX_ACCESS_TOKEN
+	)?.trim();
+	const envAccountId = (deps.env.OPENAI_CODEX_ACCOUNT_ID || deps.env.CHATGPT_ACCOUNT_ID)?.trim();
+	if (envAccessToken) {
+		return { accessToken: envAccessToken, accountId: envAccountId || undefined };
+	}
+
 	// Try pi's auth.json first
 	const piAuthPath = path.join(deps.homedir(), ".pi", "agent", "auth.json");
 	try {

@@ -60,6 +60,7 @@ type SettingsCategory =
 	| "providers"
 	| "pin-provider"
 	| ProviderCategory
+	| "keybindings"
 	| "display"
 	| "display-theme"
 	| "display-theme-save"
@@ -341,6 +342,7 @@ export async function showSettingsUI(
 					main: "sub-bar Settings",
 					providers: "Provider Settings",
 					"pin-provider": "Provider Shown",
+					keybindings: "Keybindings",
 					display: "Adv. Display Settings",
 					"display-theme": "Themes",
 					"display-theme-save": "Save Theme",
@@ -453,6 +455,72 @@ export async function showSettingsUI(
 					};
 					activeList = selectList;
 					container.addChild(selectList);
+				} else if (currentCategory === "keybindings") {
+					const parseKeybinding = (raw: string): string | null => {
+						const trimmed = raw.trim().toLowerCase();
+						if (!trimmed) {
+							ctx.ui.notify("Enter a key combo (e.g. ctrl+alt+p) or 'none' to disable", "warning");
+							return null;
+						}
+						if (trimmed === "none") return "none";
+						const parts = trimmed.split("+");
+						const modifiers = new Set(["ctrl", "shift", "alt"]);
+						const baseKeys = parts.filter((p) => !modifiers.has(p));
+						if (baseKeys.length !== 1) {
+							ctx.ui.notify("Invalid key combo. Use format like ctrl+alt+p or ctrl+s", "warning");
+							return null;
+						}
+						return trimmed;
+					};
+
+					const kbItems: SettingItem[] = [
+						{
+							id: "cycleProvider",
+							label: "Cycle Provider",
+							currentValue: settings.keybindings.cycleProvider,
+							description: "Shortcut to cycle through providers. Changes take effect after pi restart.",
+							submenu: buildInputSubmenu(
+								"Cycle Provider shortcut",
+								parseKeybinding,
+								undefined,
+								"Enter a key combo (e.g. ctrl+alt+p) or 'none' to disable.",
+							),
+						},
+						{
+							id: "toggleResetFormat",
+							label: "Toggle Reset Format",
+							currentValue: settings.keybindings.toggleResetFormat,
+							description: "Shortcut to toggle reset timer format. Changes take effect after pi restart.",
+							submenu: buildInputSubmenu(
+								"Toggle Reset Format shortcut",
+								parseKeybinding,
+								undefined,
+								"Enter a key combo (e.g. ctrl+alt+r) or 'none' to disable.",
+							),
+						},
+					];
+
+					const handleKbChange = (id: string, value: string) => {
+						if (id === "cycleProvider" || id === "toggleResetFormat") {
+							settings.keybindings = { ...settings.keybindings, [id]: value };
+							saveSettings(settings);
+							if (onSettingsChange) void onSettingsChange(settings);
+						}
+					};
+
+					const kbList = new SettingsList(
+						kbItems,
+						Math.min(kbItems.length + 3, 10),
+						getSettingsListTheme(),
+						handleKbChange,
+						() => {
+							currentCategory = "main";
+							rebuild();
+							tui.requestRender();
+						},
+					);
+					activeList = kbList;
+					container.addChild(kbList);
 				} else if (currentCategory === "providers") {
 					const items = buildProviderListItems(settings, coreSettings.providers);
 					const selectList = new SelectList(items, Math.min(items.length, 10), {
@@ -1238,6 +1306,7 @@ export async function showSettingsUI(
 				// Help text
 				const usesSettingsList =
 					Boolean(providerCategory) ||
+					currentCategory === "keybindings" ||
 					currentCategory === "display-layout" ||
 					currentCategory === "display-bar" ||
 					currentCategory === "display-provider" ||

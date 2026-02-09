@@ -10,10 +10,11 @@ import * as fs from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderName, ProviderUsageEntry, SubCoreAllState, SubCoreState, UsageSnapshot } from "./src/types.js";
-import { getDefaultSettings, type Settings, type BaseTextColor } from "./src/settings-types.js";
+import { type Settings, type BaseTextColor } from "./src/settings-types.js";
 import { isBackgroundColor, resolveBaseTextColor, resolveDividerColor } from "./src/settings-types.js";
 import { buildDividerLine } from "./src/dividers.js";
 import type { CoreSettings } from "@marckrenn/pi-sub-shared";
+import type { KeyId } from "@mariozechner/pi-tui";
 import { formatUsageStatus, formatUsageStatusWithWidth } from "./src/formatting.js";
 import { clearSettingsCache, loadSettings, saveSettings, SETTINGS_PATH } from "./src/settings.js";
 import { showSettingsUI } from "./src/settings-ui.js";
@@ -124,7 +125,7 @@ function loadScopedModelPatterns(cwd: string): string[] {
  */
 export default function createExtension(pi: ExtensionAPI) {
 	let lastContext: ExtensionContext | undefined;
-	let settings: Settings = getDefaultSettings();
+	let settings: Settings = loadSettings();
 	let uiEnabled = true;
 	let currentUsage: UsageSnapshot | undefined;
 	let usageEntries: Partial<Record<ProviderName, UsageSnapshot>> = {};
@@ -399,6 +400,7 @@ export default function createExtension(pi: ExtensionAPI) {
 			displayThemes: loaded.displayThemes,
 			displayUserTheme: loaded.displayUserTheme,
 			pinnedProvider: loaded.pinnedProvider,
+			keybindings: loaded.keybindings,
 		};
 		coreSettings = getFallbackCoreSettings(settings);
 		updateFetchFailureTicker();
@@ -547,7 +549,7 @@ export default function createExtension(pi: ExtensionAPI) {
 			}),
 			{ placement: settings.display.widgetPlacement ?? "belowEditor" },
 		);
-		
+
 	}
 
 	function resolveDisplayedUsage(): UsageSnapshot | undefined {
@@ -905,24 +907,30 @@ export default function createExtension(pi: ExtensionAPI) {
 	});
 
 	// Register shortcut to cycle providers
-	pi.registerShortcut("ctrl+alt+p", {
-		description: "Cycle usage provider",
-		handler: async () => {
-			emitCoreAction({ type: "cycleProvider" });
-		},
-	});
+	const cycleProviderKey = settings.keybindings?.cycleProvider || "ctrl+alt+p";
+	if (cycleProviderKey !== "none") {
+		pi.registerShortcut(cycleProviderKey as KeyId, {
+			description: "Cycle usage provider",
+			handler: async () => {
+				emitCoreAction({ type: "cycleProvider" });
+			},
+		});
+	}
 
 	// Register shortcut to toggle reset timer format
-	pi.registerShortcut("ctrl+alt+r", {
-		description: "Toggle reset timer format",
-		handler: async () => {
-			settings.display.resetTimeFormat = settings.display.resetTimeFormat === "datetime" ? "relative" : "datetime";
-			saveSettings(settings);
-			if (lastContext && currentUsage) {
-				renderUsageWidget(lastContext, currentUsage);
-			}
-		},
-	});
+	const toggleResetFormatKey = settings.keybindings?.toggleResetFormat || "ctrl+alt+r";
+	if (toggleResetFormatKey !== "none") {
+		pi.registerShortcut(toggleResetFormatKey as KeyId, {
+			description: "Toggle reset timer format",
+			handler: async () => {
+				settings.display.resetTimeFormat = settings.display.resetTimeFormat === "datetime" ? "relative" : "datetime";
+				saveSettings(settings);
+				if (lastContext && currentUsage) {
+					renderUsageWidget(lastContext, currentUsage);
+				}
+			},
+		});
+	}
 
 	pi.on("session_start", async (_event, ctx) => {
 		lastContext = ctx;

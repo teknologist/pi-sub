@@ -76,6 +76,10 @@ function loadLegacyCopilotToken(deps: Dependencies): string | undefined {
  * Load Copilot token from pi auth.json first, then fallback to legacy locations.
  */
 function loadCopilotToken(deps: Dependencies): string | undefined {
+	// Explicit override via env var
+	const envToken = (deps.env.COPILOT_GITHUB_TOKEN || deps.env.GH_TOKEN || deps.env.GITHUB_TOKEN || deps.env.COPILOT_TOKEN)?.trim();
+	if (envToken) return envToken;
+
 	const authPath = path.join(deps.homedir(), ".pi", "agent", "auth.json");
 	try {
 		if (deps.fileExists(authPath)) {

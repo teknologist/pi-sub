@@ -14,7 +14,11 @@ import { getSettings } from "../../settings.js";
  * Load Claude API token from various sources
  */
 function loadClaudeToken(deps: Dependencies): string | undefined {
-	// Try pi auth.json first
+	// Explicit override via env var (useful in CI / menu bar apps)
+	const envToken = deps.env.ANTHROPIC_OAUTH_TOKEN?.trim();
+	if (envToken) return envToken;
+
+	// Try pi auth.json next
 	const piAuthPath = path.join(deps.homedir(), ".pi", "agent", "auth.json");
 	try {
 		if (deps.fileExists(piAuthPath)) {

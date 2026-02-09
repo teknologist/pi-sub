@@ -12,6 +12,8 @@ export type TooltipSelectItem = SelectItem & { tooltip?: string };
 
 export function buildMainMenuItems(settings: Settings, pinnedProvider?: ProviderName | null): TooltipSelectItem[] {
 	const pinnedLabel = pinnedProvider ? PROVIDER_DISPLAY_NAMES[pinnedProvider] : "auto (current provider)";
+	const kb = settings.keybindings;
+	const kbDesc = `cycle: ${kb.cycleProvider}, reset: ${kb.toggleResetFormat}`;
 	return [
 		{
 			value: "display-theme",
@@ -36,6 +38,12 @@ export function buildMainMenuItems(settings: Settings, pinnedProvider?: Provider
 			label: "Provider Shown",
 			description: pinnedLabel,
 			tooltip: "Select which provider is shown in the widget.",
+		},
+		{
+			value: "keybindings",
+			label: "Keybindings",
+			description: kbDesc,
+			tooltip: "Configure keyboard shortcuts. Changes take effect after pi restart.",
 		},
 		{
 			value: "open-core-settings",
