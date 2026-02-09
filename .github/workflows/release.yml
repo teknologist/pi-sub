@@ -53,15 +53,42 @@ jobs:
           export VERSION NOTES_FILE
           node <<'NODE'
           const fs = require("fs");
+
           const version = process.env.VERSION;
           const notesPath = process.env.NOTES_FILE;
-          const changelogPath = "packages/sub-bar/CHANGELOG.md";
-          if (!version || !fs.existsSync(changelogPath)) process.exit(0);
-          const content = fs.readFileSync(changelogPath, "utf8");
-          const sections = content.split("\n## ");
-          const match = sections.find((section) => section.startsWith(`${version}\n`));
-          if (!match) process.exit(0);
-          const notes = `## ${match.trim()}\n`;
+
+          const packages = [
+            { name: "@marckrenn/pi-sub-bar", changelog: "packages/sub-bar/CHANGELOG.md" },
+            { name: "@marckrenn/pi-sub-core", changelog: "packages/sub-core/CHANGELOG.md" },
+            { name: "@marckrenn/pi-sub-shared", changelog: "packages/sub-shared/CHANGELOG.md" },
+          ];
+
+          function extractSection(changelogPath) {
+            if (!fs.existsSync(changelogPath)) return null;
+            const content = fs.readFileSync(changelogPath, "utf8");
+            const sections = content.split("\n## ");
+            const match = sections.find((section) => section.startsWith(`${version}\n`));
+            if (!match) return null;
+            const lines = match.split("\n");
+            // drop the first line (the version header)
+            lines.shift();
+            const body = lines.join("\n").trim();
+            return body.length > 0 ? body : null;
+          }
+
+          if (!version) process.exit(0);
+
+          let notes = `## ${version}\n`;
+          let hasAny = false;
+
+          for (const pkg of packages) {
+            const body = extractSection(pkg.changelog);
+            if (!body) continue;
+            hasAny = true;
+            notes += `\n### ${pkg.name}\n\n${body}\n`;
+          }
+
+          if (!hasAny) process.exit(0);
           fs.writeFileSync(notesPath, notes);
           NODE
           if git rev-parse "$TAG" >/dev/null 2>&1; then
