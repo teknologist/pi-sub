@@ -21,6 +21,7 @@ import { formatErrorForDisplay, isExpectedMissingData } from "./errors.js";
 import { getStatusIcon, getStatusLabel } from "./status.js";
 import { shouldShowWindow } from "./providers/windows.js";
 import { getUsageExtras } from "./providers/extras.js";
+import { normalizeTokens } from "./utils.js";
 
 export interface UsageWindowParts {
 	label: string;
@@ -34,6 +35,27 @@ type ModelInput = ModelInfo | string | undefined;
 function resolveModelInfo(model?: ModelInput): ModelInfo | undefined {
 	if (!model) return undefined;
 	return typeof model === "string" ? { id: model } : model;
+}
+
+function isCodexSparkModel(model?: ModelInput): boolean {
+	const tokens = normalizeTokens(typeof model === "string" ? model : model?.id ?? "");
+	return tokens.includes("codex") && tokens.includes("spark");
+}
+
+function isCodexSparkWindow(window: RateWindow): boolean {
+	const tokens = normalizeTokens(window.label ?? "");
+	return tokens.includes("codex") && tokens.includes("spark");
+}
+
+function getDisplayWindowLabel(window: RateWindow, model?: ModelInput): string {
+	if (!isCodexSparkWindow(window)) return window.label;
+	if (!isCodexSparkModel(model)) return window.label;
+	const parts = window.label.trim().split(/\s+/);
+	const suffix = parts.at(-1) ?? "";
+	if (/^\d+h$/i.test(suffix) || /^day$/i.test(suffix) || /^week$/i.test(suffix)) {
+		return suffix;
+	}
+	return window.label;
 }
 
 /**
@@ -367,9 +389,10 @@ export function formatUsageWindow(
 	isCodex: boolean,
 	settings?: Settings,
 	usage?: UsageSnapshot,
-	options?: { useNormalColors?: boolean; barWidthOverride?: number }
+	options?: { useNormalColors?: boolean; barWidthOverride?: number },
+	model?: ModelInput
 ): string {
-	const parts = formatUsageWindowParts(theme, window, isCodex, settings, usage, options);
+	const parts = formatUsageWindowParts(theme, window, isCodex, settings, usage, options, model);
 	const baseTextColor = resolveBaseTextColor(settings?.display.baseTextColor);
 	const usageTargets = resolveUsageColorTargets(settings);
 
@@ -411,7 +434,8 @@ export function formatUsageWindowParts(
 	isCodex: boolean,
 	settings?: Settings,
 	usage?: UsageSnapshot,
-	options?: { useNormalColors?: boolean; barWidthOverride?: number }
+	options?: { useNormalColors?: boolean; barWidthOverride?: number },
+	model?: ModelInput
 ): UsageWindowParts {
 	const barStyle: BarStyle = settings?.display.barStyle ?? "both";
 	const barWidthSetting = settings?.display.barWidth;
@@ -539,7 +563,8 @@ export function formatUsageWindowParts(
 	const resetContainment = settings?.display.resetTimeContainment ?? "()";
 	const leftSuffix = resetText && resetTimeFormat === "relative" && showUsageLabels ? " left" : "";
 
-	const coloredTitle = applyBaseTextColor(theme, titleColor, window.label);
+	const displayLabel = getDisplayWindowLabel(window, model);
+	const coloredTitle = applyBaseTextColor(theme, titleColor, displayLabel);
 	const titlePart = showWindowTitle ? (boldWindowTitle ? theme.bold(coloredTitle) : coloredTitle) : "";
 
 	let labelPart = titlePart;
@@ -610,7 +635,7 @@ export function formatUsageStatus(
 		if (!shouldShowWindow(usage, w, settings, modelInfo)) {
 			continue;
 		}
-		parts.push(formatUsageWindow(theme, w, invertUsage, settings, usage));
+		parts.push(formatUsageWindow(theme, w, invertUsage, settings, usage, undefined, modelInfo));
 	}
 
 	// Add extra usage lines (extra usage off, copilot multiplier, etc.)
@@ -698,7 +723,7 @@ export function formatUsageStatusWithWidth(
 
 	const barSpacerWidth = hasBar ? 1 : 0;
 	const baseWindowWidths = windows.map((w) =>
-		visibleWidth(formatUsageWindow(theme, w, invertUsage, settings, usage, { barWidthOverride: 0 })) + barSpacerWidth
+		visibleWidth(formatUsageWindow(theme, w, invertUsage, settings, usage, { barWidthOverride: 0 }, modelInfo)) + barSpacerWidth
 	);
 	const extraWidths = extraParts.map((part) => visibleWidth(part));
 
@@ -790,7 +815,7 @@ export function formatUsageStatusWithWidth(
 	for (let i = 0; i < windows.length; i++) {
 		const totalWidth = barWidths[i] ?? barBaseWidthCalc;
 		const contentWidth = containBar ? Math.max(0, totalWidth - barContainerExtra) : totalWidth;
-		parts.push(formatUsageWindow(theme, windows[i], invertUsage, settings, usage, { barWidthOverride: contentWidth }));
+		parts.push(formatUsageWindow(theme, windows[i], invertUsage, settings, usage, { barWidthOverride: contentWidth }, modelInfo));
 	}
 	for (const extra of extraParts) {
 		parts.push(extra);

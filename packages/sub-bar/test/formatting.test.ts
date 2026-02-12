@@ -349,3 +349,20 @@ test("codex shows model-specific usage for GPT-5.3-Codex-Spark", () => {
 	assert.equal(shouldShowWindow(usage, usage.windows[0], settings, { id: "gpt-4o" }), true);
 	assert.equal(shouldShowWindow(usage, usage.windows[2], settings, { id: "gpt-4o" }), false);
 });
+
+test("codex spark usage window labels hide model prefix", () => {
+	const settings = getDefaultSettings();
+	const usage: UsageSnapshot = {
+		provider: "codex",
+		displayName: "Codex Plan",
+		windows: [
+			{ label: "GPT-5.3-Codex-Spark 5h", usedPercent: 3 },
+			{ label: "GPT-5.3-Codex-Spark Week", usedPercent: 4 },
+		],
+	};
+
+	const output = formatUsageStatus(theme, usage, "gpt-5.3-codex-spark", settings);
+	assert.equal(output?.includes("GPT-5.3-Codex-Spark"), false);
+	assert.equal(output?.includes("5h"), true);
+	assert.equal(output?.includes("Week"), true);
+});
