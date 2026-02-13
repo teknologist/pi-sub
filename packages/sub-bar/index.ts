@@ -534,33 +534,9 @@ export default function createExtension(pi: ExtensionAPI) {
 			return;
 		}
 
-		const placement = settings.display.widgetPlacement ?? "belowEditor";
-
-		if (placement === "status") {
-			ctx.ui.setWidget("usage", undefined);
-			if (!usage && !message) {
-				ctx.ui.setStatus("sub-bar", undefined);
-				return;
-			}
-			const theme = ctx.ui.theme;
-			const terminalWidth = process.stdout.columns || 80;
-			// In status-line placement we must not use fill-based layouts (they assume full terminal width).
-			// The Pi footer concatenates *all* extension statuses onto one line and then truncates,
-			// so we render at natural width here to avoid padding that would overflow when other
-			// status hooks are present.
-			const lines = formatUsageContent(ctx, theme, usage, terminalWidth, message, { forceNoFill: true });
-			if (lines.length === 0) {
-				ctx.ui.setStatus("sub-bar", undefined);
-				return;
-			}
-			const statusLine = lines.join(" ");
-			ctx.ui.setStatus("sub-bar", truncateToWidth(statusLine, terminalWidth, theme.fg("dim", "...")));
-			return;
-		}
 
 		if (!usage && !message) {
 			ctx.ui.setWidget("usage", undefined);
-			ctx.ui.setStatus("sub-bar", undefined);
 			return;
 		}
 

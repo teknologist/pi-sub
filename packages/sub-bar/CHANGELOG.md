@@ -4,8 +4,8 @@
 
 ### Minor Changes
 
-- PR #10: `showContextBar` now defaults to off (for upgrades and new installs). Thanks [@pasky](https://github.com/pasky) for this feature.
-- Adds optional context-window usage bar with configurable placement and status placement improvements for status bar rendering.
+- Added optional context-window support via `showContextBar` (default: off). When enabled, a `Ctx` bar can appear as the leftmost usage window.
+- Kept model-specific Codex Spark handling behavior.
 
 ### Updated dependencies:
 - @marckrenn/pi-sub-core@1.2.0

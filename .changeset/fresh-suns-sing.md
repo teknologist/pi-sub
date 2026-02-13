@@ -4,7 +4,6 @@
 "@marckrenn/pi-sub-shared": minor
 ---
 
-- [#10](https://github.com/marckrenn/pi-sub/pull/10) defaults `showContextBar` to off for upgrades and new installs, so the context bar is hidden unless enabled explicitly. Thanks [@pasky](https://github.com/pasky) for this feature.
-- Added optional context-window usage rendering: when enabled, an optional `Ctx` bar can be shown as the leftmost window and context-aware bar placement support was added for status display.
-- Sub-core now supports parsing Codex `additional_rate_limits` and exposes model-specific Spark quotas; sub-bar now filters and formats Codex Spark usage windows for model-specific models, including `Codex (Spark)` provider labeling.
-- Fixed tool registration compatibility with the latest Pi tool API by updating the `execute` callback parameter order in `sub-core` tool handlers (aligning with upstream `ExtensionAPI` typing).
+- Added an optional `showContextBar` setting (default: off), as introduced in [#10](https://github.com/marckrenn/pi-sub/pull/10) by [@pasky](https://github.com/pasky), to render the current context usage as an optional leftmost `Ctx` bar in sub-bar usage output.
+- Support for Codex Spark usage (auto-selected for `gpt-5.3-codex-spark`), including model-specific window labeling behavior.
+- OpenAI Status provider now surfaces the Codex-specific status endpoint instead of the generic status summary when available.

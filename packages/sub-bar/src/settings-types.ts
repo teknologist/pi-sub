@@ -53,7 +53,7 @@ export type WidgetWrapping = OverflowMode;
 /**
  * Widget placement
  */
-export type WidgetPlacement = "belowEditor" | "status";
+export type WidgetPlacement = "belowEditor";
 
 /**
  * Alignment for the widget
