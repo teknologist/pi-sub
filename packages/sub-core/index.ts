@@ -90,7 +90,6 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 	let settingsLoaded = false;
 	let toolsRegistered = false;
 	let lastState: SubCoreState = {};
-	let shouldSkipNextModelSelectFetch = true;
 	let settingsSnapshot = "";
 	let settingsMtimeMs = 0;
 	let settingsDebounce: NodeJS.Timeout | undefined;
@@ -454,7 +453,6 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 
 	pi.on("session_start", async (_event, ctx) => {
 		lastContext = ctx;
-		shouldSkipNextModelSelectFetch = true;
 		ensureSettingsLoaded();
 		void refresh(ctx, { allowStaleCache: true, skipFetch: true });
 		void refreshStatus(ctx, { allowStaleCache: true, skipFetch: true });
@@ -500,12 +498,6 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 	pi.on("model_select" as unknown as "session_start", async (_event: unknown, ctx: ExtensionContext) => {
 		controllerState.currentProvider = undefined;
 		controllerState.cachedUsage = undefined;
-		if (shouldSkipNextModelSelectFetch) {
-			shouldSkipNextModelSelectFetch = false;
-			void refresh(ctx, { allowStaleCache: true, skipFetch: true });
-			void refreshStatus(ctx, { allowStaleCache: true, skipFetch: true });
-			return;
-		}
 		void refresh(ctx, { force: true, allowStaleCache: true });
 		void refreshStatus(ctx, { force: true, allowStaleCache: true });
 	});

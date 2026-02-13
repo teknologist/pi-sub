@@ -1,5 +1,11 @@
 # @marckrenn/pi-sub-shared
 
+## 1.2.0
+
+### Patch Changes
+
+- No functional changes in this release; package version bumped to align with @marckrenn/pi-sub-bar and @marckrenn/pi-sub-core releases.
+
 ## 1.1.0
 
 ## 1.0.6

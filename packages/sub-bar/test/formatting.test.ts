@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { visibleWidth } from "@mariozechner/pi-tui";
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import { formatUsageStatus, formatUsageStatusWithWidth, formatUsageWindowParts } from "../src/formatting.js";
+import { shouldShowWindow } from "../src/providers/windows.js";
 import { getDefaultSettings } from "../src/settings-types.js";
 import type { UsageSnapshot } from "../src/types.js";
 
@@ -326,4 +327,111 @@ test("fill bars with extras stay within width", () => {
 	assert.ok(output);
 	assert.ok(output.includes("Model multiplier"));
 	assert.ok(visibleWidth(output) <= 140);
+});
+
+
+test("codex shows model-specific usage for GPT-5.3-Codex-Spark", () => {
+	const settings = getDefaultSettings();
+	const usage: UsageSnapshot = {
+		provider: "codex",
+		displayName: "Codex Plan",
+		windows: [
+			{ label: "5h", usedPercent: 12 },
+			{ label: "GPT-5.3-Codex-Spark 5h", usedPercent: 3 },
+			{ label: "GPT-5.3-Codex-Spark Week", usedPercent: 4 },
+		],
+	};
+
+	assert.equal(shouldShowWindow(usage, usage.windows[1], settings, { id: "gpt-5.3-codex-spark" }), true);
+	assert.equal(shouldShowWindow(usage, usage.windows[0], settings, { id: "gpt-5.3-codex-spark" }), false);
+
+	assert.equal(shouldShowWindow(usage, usage.windows[1], settings, { id: "gpt-4o" }), false);
+	assert.equal(shouldShowWindow(usage, usage.windows[0], settings, { id: "gpt-4o" }), true);
+	assert.equal(shouldShowWindow(usage, usage.windows[2], settings, { id: "gpt-4o" }), false);
+});
+
+test("codex spark usage window labels hide model prefix", () => {
+	const settings = getDefaultSettings();
+	const usage: UsageSnapshot = {
+		provider: "codex",
+		displayName: "Codex Plan",
+		windows: [
+			{ label: "GPT-5.3-Codex-Spark 5h", usedPercent: 3 },
+			{ label: "GPT-5.3-Codex-Spark Week", usedPercent: 4 },
+		],
+	};
+
+	const output = formatUsageStatus(theme, usage, "gpt-5.3-codex-spark", settings);
+	assert.equal(output?.includes("GPT-5.3-Codex-Spark"), false);
+	assert.equal(output?.includes("5h"), true);
+	assert.equal(output?.includes("Week"), true);
+});
+
+test("codex spark provider label uses Codex (Spark)", () => {
+	const settings = getDefaultSettings();
+	const usage: UsageSnapshot = {
+		provider: "codex",
+		displayName: "Codex Plan",
+		windows: [{ label: "5h", usedPercent: 3 }],
+	};
+
+	const output = formatUsageStatus(theme, usage, "gpt-5.3-codex-spark", settings);
+	assert.equal(output?.includes("Codex (Spark)"), true);
+	assert.equal(output?.includes("Codex Plan"), false);
+});
+
+test("context bar appears as leftmost element when enabled", () => {
+	const settings = getDefaultSettings();
+	settings.display.showContextBar = true;
+	settings.display.barWidth = 6;
+
+	const contextInfo = { tokens: 50000, contextWindow: 200000, percent: 25 };
+	const output = formatUsageStatus(theme, buildUsage(), undefined, settings, contextInfo);
+	assert.ok(output);
+	assert.ok(output.includes("Ctx"));
+	assert.ok(output.includes("25%"));
+});
+
+test("context bar is hidden when showContextBar is false", () => {
+	const settings = getDefaultSettings();
+	settings.display.showContextBar = false;
+	settings.display.barWidth = 6;
+
+	const contextInfo = { tokens: 50000, contextWindow: 200000, percent: 25 };
+	const output = formatUsageStatus(theme, buildUsage(), undefined, settings, contextInfo);
+	assert.ok(output);
+	assert.ok(!output.includes("Ctx"));
+});
+
+test("context bar with fill width stays within bounds", () => {
+	const settings = getDefaultSettings();
+	settings.display.showContextBar = true;
+	settings.display.barWidth = "fill";
+	settings.display.containBar = true;
+
+	const contextInfo = { tokens: 100000, contextWindow: 200000, percent: 50 };
+	const output = formatUsageStatusWithWidth(
+		theme,
+		buildUsage(),
+		100,
+		undefined,
+		settings,
+		{ labelGapFill: true },
+		contextInfo
+	);
+	assert.ok(output);
+	assert.ok(output.includes("Ctx"));
+	assert.ok(visibleWidth(output) <= 100);
+});
+
+test("context bar not shown when contextWindow is 0", () => {
+	const settings = getDefaultSettings();
+	settings.display.showContextBar = true;
+	settings.display.barWidth = 6;
+
+	const contextInfo = { tokens: 0, contextWindow: 0, percent: 0 };
+	const output = formatUsageStatus(theme, buildUsage(), undefined, settings, contextInfo);
+	assert.ok(output);
+	assert.ok(!output.includes("Ctx"));
+
 });

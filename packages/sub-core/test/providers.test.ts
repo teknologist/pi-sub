@@ -279,6 +279,44 @@ test("codex formats primary and secondary windows", async () => {
 	assertWindow(usage, "Day");
 });
 
+test("codex includes additional rate limits for model-specific usage", async () => {
+	const provider = new CodexProvider();
+	const { deps, files } = createDeps({
+		fetch: async () => createJsonResponse({
+			rate_limit: {
+				primary_window: {
+					reset_at: Math.floor(Date.now() / 1000) + 3600,
+					limit_window_seconds: 3600,
+					used_percent: 12,
+				},
+			},
+			additional_rate_limits: [
+				{
+					limit_name: "GPT-5.3-Codex-Spark",
+					rate_limit: {
+						primary_window: {
+							reset_at: Math.floor(Date.now() / 1000) + 1800,
+							limit_window_seconds: 18000,
+							used_percent: 1,
+						},
+						secondary_window: {
+							reset_at: Math.floor(Date.now() / 1000) + 1800 + 604_800,
+							limit_window_seconds: 604_800,
+							used_percent: 2,
+						},
+					},
+				},
+			],
+		}),
+	});
+	withAuth(files, { "openai-codex": { access: "token", accountId: "acct" } }, deps.homedir());
+
+	const usage = await provider.fetchUsage(deps);
+	assertWindow(usage, "1h");
+	assertWindow(usage, "GPT-5.3-Codex-Spark 5h");
+	assertWindow(usage, "GPT-5.3-Codex-Spark Week");
+});
+
 test("kiro parses percentage and reset date", async () => {
 	const provider = new KiroProvider();
 	const output = "██████ 12%\nresets on 01/01";

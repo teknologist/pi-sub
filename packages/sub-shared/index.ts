@@ -133,8 +133,13 @@ export type SubCoreEvents =
 	| { type: "sub-core:update-current"; state: SubCoreState }
 	| { type: "sub-core:update-all"; state: SubCoreAllState };
 
+export interface StatusPageComponentMatch {
+	id?: string;
+	name?: string;
+}
+
 export type ProviderStatusConfig =
-	| { type: "statuspage"; url: string }
+	| { type: "statuspage"; url: string; component?: StatusPageComponentMatch }
 	| { type: "google-workspace" };
 
 export interface ProviderDetectionConfig {
@@ -171,7 +176,14 @@ export const PROVIDER_METADATA: Record<ProviderName, ProviderMetadata> = {
 	},
 	codex: {
 		displayName: "OpenAI Codex",
-		status: { type: "statuspage", url: "https://status.openai.com/api/v2/status.json" },
+		status: {
+			type: "statuspage",
+			url: "https://status.openai.com/api/v2/status.json",
+			component: {
+				id: "01JVCV8YSWZFRSM1G5CVP253SK",
+				name: "Codex",
+			},
+		},
 		detection: { providerTokens: ["openai", "codex"], modelTokens: ["gpt", "o1", "o3"] },
 	},
 	kiro: {

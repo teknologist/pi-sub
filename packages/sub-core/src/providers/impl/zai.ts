@@ -26,7 +26,7 @@ function loadZaiApiKey(deps: Dependencies): string | undefined {
 	try {
 		if (deps.fileExists(authPath)) {
 			const auth = JSON.parse(deps.readFile(authPath) ?? "{}");
-			return auth["z-ai"]?.access || auth["zai"]?.access;
+			return auth["z-ai"]?.access || auth["z-ai"]?.key || auth["zai"]?.access || auth["zai"]?.key;
 		}
 	} catch {
 		// Ignore parse errors

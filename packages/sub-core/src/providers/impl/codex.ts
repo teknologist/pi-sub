@@ -9,6 +9,23 @@ import { noCredentials, fetchFailed, httpError } from "../../errors.js";
 import { formatReset, createTimeoutController } from "../../utils.js";
 import { API_TIMEOUT_MS } from "../../config.js";
 
+interface CodexRateWindow {
+	reset_at?: number;
+	limit_window_seconds?: number;
+	used_percent?: number;
+}
+
+interface CodexRateLimit {
+	primary_window?: CodexRateWindow;
+	secondary_window?: CodexRateWindow;
+}
+
+interface CodexAdditionalRateLimit {
+	limit_name?: string;
+	metered_feature?: string;
+	rate_limit?: CodexRateLimit;
+}
+
 /**
  * Load Codex credentials from auth.json
  * First tries pi's auth.json, then falls back to legacy codex location
@@ -64,6 +81,45 @@ function loadCodexCredentials(deps: Dependencies): { accessToken?: string; accou
 	return {};
 }
 
+function getWindowLabel(windowSeconds?: number, fallbackWindowSeconds?: number): string {
+	const safeWindowSeconds =
+		typeof windowSeconds === "number" && windowSeconds > 0
+			? windowSeconds
+			: typeof fallbackWindowSeconds === "number" && fallbackWindowSeconds > 0
+				? fallbackWindowSeconds
+				: 0;
+	if (!safeWindowSeconds) {
+		return "0h";
+	}
+	const windowHours = Math.round(safeWindowSeconds / 3600);
+	if (windowHours >= 144) return "Week";
+	if (windowHours >= 24) return "Day";
+	return `${windowHours}h`;
+}
+
+function pushWindow(
+	windows: RateWindow[],
+	prefix: string | undefined,
+	window: CodexRateWindow | undefined,
+	fallbackWindowSeconds?: number
+): void {
+	if (!window) return;
+	const resetDate = window.reset_at ? new Date(window.reset_at * 1000) : undefined;
+	const label = getWindowLabel(window.limit_window_seconds, fallbackWindowSeconds);
+	const windowLabel = prefix ? `${prefix} ${label}` : label;
+	windows.push({
+		label: windowLabel,
+		usedPercent: window.used_percent || 0,
+		resetDescription: resetDate ? formatReset(resetDate) : undefined,
+		resetAt: resetDate?.toISOString(),
+	});
+}
+
+function addRateWindows(windows: RateWindow[], rateLimit: CodexRateLimit | undefined, prefix?: string): void {
+	pushWindow(windows, prefix, rateLimit?.primary_window, 10800);
+	pushWindow(windows, prefix, rateLimit?.secondary_window, 86400);
+}
+
 export class CodexProvider extends BaseProvider {
 	readonly name = "codex" as const;
 	readonly displayName = "Codex Plan";
@@ -100,45 +156,24 @@ export class CodexProvider extends BaseProvider {
 			}
 
 			const data = (await res.json()) as {
-				rate_limit?: {
-					primary_window?: {
-						reset_at?: number;
-						limit_window_seconds?: number;
-						used_percent?: number;
-					};
-					secondary_window?: {
-						reset_at?: number;
-						limit_window_seconds?: number;
-						used_percent?: number;
-					};
-				};
+				rate_limit?: CodexRateLimit;
+				additional_rate_limits?: CodexAdditionalRateLimit[];
 			};
 
 			const windows: RateWindow[] = [];
+			addRateWindows(windows, data.rate_limit);
 
-			if (data.rate_limit?.primary_window) {
-				const pw = data.rate_limit.primary_window;
-				const resetDate = pw.reset_at ? new Date(pw.reset_at * 1000) : undefined;
-				const windowHours = Math.round((pw.limit_window_seconds || 10800) / 3600);
-				windows.push({
-					label: `${windowHours}h`,
-					usedPercent: pw.used_percent || 0,
-					resetDescription: resetDate ? formatReset(resetDate) : undefined,
-					resetAt: resetDate?.toISOString(),
-				});
-			}
-
-			if (data.rate_limit?.secondary_window) {
-				const sw = data.rate_limit.secondary_window;
-				const resetDate = sw.reset_at ? new Date(sw.reset_at * 1000) : undefined;
-				const windowHours = Math.round((sw.limit_window_seconds || 86400) / 3600);
-				const label = windowHours >= 144 ? "Week" : windowHours >= 24 ? "Day" : `${windowHours}h`;
-				windows.push({
-					label,
-					usedPercent: sw.used_percent || 0,
-					resetDescription: resetDate ? formatReset(resetDate) : undefined,
-					resetAt: resetDate?.toISOString(),
-				});
+			if (Array.isArray(data.additional_rate_limits)) {
+				for (const entry of data.additional_rate_limits) {
+					if (!entry || typeof entry !== "object") continue;
+					const prefix =
+						typeof entry.limit_name === "string" && entry.limit_name.trim().length > 0
+							? entry.limit_name.trim()
+							: typeof entry.metered_feature === "string" && entry.metered_feature.trim().length > 0
+								? entry.metered_feature.trim()
+								: "Additional";
+					addRateWindows(windows, entry.rate_limit, prefix);
+				}
 			}
 
 			return this.snapshot({ windows });

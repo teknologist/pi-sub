@@ -21,6 +21,7 @@ import { formatErrorForDisplay, isExpectedMissingData } from "./errors.js";
 import { getStatusIcon, getStatusLabel } from "./status.js";
 import { shouldShowWindow } from "./providers/windows.js";
 import { getUsageExtras } from "./providers/extras.js";
+import { normalizeTokens } from "./utils.js";
 
 export interface UsageWindowParts {
 	label: string;
@@ -29,11 +30,41 @@ export interface UsageWindowParts {
 	reset: string;
 }
 
+/**
+ * Context window usage info from the pi framework
+ */
+export interface ContextInfo {
+	tokens: number;
+	contextWindow: number;
+	percent: number;
+}
+
 type ModelInput = ModelInfo | string | undefined;
 
 function resolveModelInfo(model?: ModelInput): ModelInfo | undefined {
 	if (!model) return undefined;
 	return typeof model === "string" ? { id: model } : model;
+}
+
+function isCodexSparkModel(model?: ModelInput): boolean {
+	const tokens = normalizeTokens(typeof model === "string" ? model : model?.id ?? "");
+	return tokens.includes("codex") && tokens.includes("spark");
+}
+
+function isCodexSparkWindow(window: RateWindow): boolean {
+	const tokens = normalizeTokens(window.label ?? "");
+	return tokens.includes("codex") && tokens.includes("spark");
+}
+
+function getDisplayWindowLabel(window: RateWindow, model?: ModelInput): string {
+	if (!isCodexSparkWindow(window)) return window.label;
+	if (!isCodexSparkModel(model)) return window.label;
+	const parts = window.label.trim().split(/\s+/);
+	const suffix = parts.at(-1) ?? "";
+	if (/^\d+h$/i.test(suffix) || /^day$/i.test(suffix) || /^week$/i.test(suffix)) {
+		return suffix;
+	}
+	return window.label;
 }
 
 /**
@@ -271,7 +302,7 @@ function renderBarSegments(
 	return { segments, minimal };
 }
 
-function formatProviderLabel(theme: Theme, usage: UsageSnapshot, settings?: Settings): string {
+function formatProviderLabel(theme: Theme, usage: UsageSnapshot, settings?: Settings, model?: ModelInput): string {
 	const showProviderName = settings?.display.showProviderName ?? true;
 	const showStatus = settings?.providers[usage.provider]?.showStatus ?? true;
 	const error = usage.error;
@@ -315,7 +346,9 @@ function formatProviderLabel(theme: Theme, usage: UsageSnapshot, settings?: Sett
 
 	const rawName = usage.displayName?.trim() ?? "";
 	const baseName = rawName.replace(/\s+(plan|subscription|sub\.?)[\s]*$/i, "").trim();
-	const providerName = baseName || rawName;
+	const resolvedProviderName = baseName || rawName;
+	const isSpark = usage.provider === "codex" && isCodexSparkModel(model);
+	const providerName = isSpark ? `${resolvedProviderName} (Spark)` : resolvedProviderName;
 	const providerLabel = showProviderName
 		? [providerName, labelSuffix].filter(Boolean).join(" ")
 		: "";
@@ -367,9 +400,10 @@ export function formatUsageWindow(
 	isCodex: boolean,
 	settings?: Settings,
 	usage?: UsageSnapshot,
-	options?: { useNormalColors?: boolean; barWidthOverride?: number }
+	options?: { useNormalColors?: boolean; barWidthOverride?: number },
+	model?: ModelInput
 ): string {
-	const parts = formatUsageWindowParts(theme, window, isCodex, settings, usage, options);
+	const parts = formatUsageWindowParts(theme, window, isCodex, settings, usage, options, model);
 	const baseTextColor = resolveBaseTextColor(settings?.display.baseTextColor);
 	const usageTargets = resolveUsageColorTargets(settings);
 
@@ -411,7 +445,8 @@ export function formatUsageWindowParts(
 	isCodex: boolean,
 	settings?: Settings,
 	usage?: UsageSnapshot,
-	options?: { useNormalColors?: boolean; barWidthOverride?: number }
+	options?: { useNormalColors?: boolean; barWidthOverride?: number },
+	model?: ModelInput
 ): UsageWindowParts {
 	const barStyle: BarStyle = settings?.display.barStyle ?? "both";
 	const barWidthSetting = settings?.display.barWidth;
@@ -539,7 +574,8 @@ export function formatUsageWindowParts(
 	const resetContainment = settings?.display.resetTimeContainment ?? "()";
 	const leftSuffix = resetText && resetTimeFormat === "relative" && showUsageLabels ? " left" : "";
 
-	const coloredTitle = applyBaseTextColor(theme, titleColor, window.label);
+	const displayLabel = getDisplayWindowLabel(window, model);
+	const coloredTitle = applyBaseTextColor(theme, titleColor, displayLabel);
 	const titlePart = showWindowTitle ? (boldWindowTitle ? theme.bold(coloredTitle) : coloredTitle) : "";
 
 	let labelPart = titlePart;
@@ -576,16 +612,37 @@ export function formatUsageWindowParts(
 }
 
 /**
+ * Format context window usage as a progress bar
+ */
+export function formatContextBar(
+	theme: Theme,
+	context: ContextInfo,
+	settings?: Settings,
+	options?: { barWidthOverride?: number }
+): string {
+	// Create a pseudo-RateWindow for context display
+	const contextWindow: RateWindow = {
+		label: "Ctx",
+		usedPercent: context.percent,
+		// No reset description for context
+	};
+	// Format using the same window formatting logic, but with "used" semantics (not inverted)
+	return formatUsageWindow(theme, contextWindow, false, settings, undefined, options);
+}
+
+/**
  * Format a complete usage snapshot as a usage line
  */
 export function formatUsageStatus(
 	theme: Theme,
 	usage: UsageSnapshot,
 	model?: ModelInput,
-	settings?: Settings
+	settings?: Settings,
+	context?: ContextInfo
 ): string | undefined {
 	const baseTextColor = resolveBaseTextColor(settings?.display.baseTextColor);
-	const label = formatProviderLabel(theme, usage, settings);
+	const modelInfo = resolveModelInfo(model);
+	const label = formatProviderLabel(theme, usage, settings, modelInfo);
 
 	// If no windows, just show the provider name with error
 	if (usage.windows.length === 0) {
@@ -602,15 +659,20 @@ export function formatUsageStatus(
 	const parts: string[] = [];
 	const isCodex = usage.provider === "codex";
 	const invertUsage = isCodex && (settings?.providers.codex.invertUsage ?? false);
-	const modelInfo = resolveModelInfo(model);
 	const modelId = modelInfo?.id;
+
+	// Add context bar as leftmost element if enabled
+	const showContextBar = settings?.display.showContextBar ?? false;
+	if (showContextBar && context && context.contextWindow > 0) {
+		parts.push(formatContextBar(theme, context, settings));
+	}
 
 	for (const w of usage.windows) {
 		// Skip windows that are disabled in settings
 		if (!shouldShowWindow(usage, w, settings, modelInfo)) {
 			continue;
 		}
-		parts.push(formatUsageWindow(theme, w, invertUsage, settings, usage));
+		parts.push(formatUsageWindow(theme, w, invertUsage, settings, usage, undefined, modelInfo));
 	}
 
 	// Add extra usage lines (extra usage off, copilot multiplier, etc.)
@@ -643,11 +705,15 @@ export function formatUsageStatusWithWidth(
 	width: number,
 	model?: ModelInput,
 	settings?: Settings,
-	options?: { labelGapFill?: boolean }
+	options?: { labelGapFill?: boolean },
+	context?: ContextInfo
 ): string | undefined {
 	const labelGapFill = options?.labelGapFill ?? false;
 	const baseTextColor = resolveBaseTextColor(settings?.display.baseTextColor);
-	const label = formatProviderLabel(theme, usage, settings);
+	const modelInfo = resolveModelInfo(model);
+	const label = formatProviderLabel(theme, usage, settings, modelInfo);
+	const showContextBar = settings?.display.showContextBar ?? false;
+	const hasContext = showContextBar && context && context.contextWindow > 0;
 
 	// If no windows, just show the provider name with error
 	if (usage.windows.length === 0) {
@@ -682,8 +748,17 @@ export function formatUsageStatusWithWidth(
 	const windows: RateWindow[] = [];
 	const isCodex = usage.provider === "codex";
 	const invertUsage = isCodex && (settings?.providers.codex.invertUsage ?? false);
-	const modelInfo = resolveModelInfo(model);
 	const modelId = modelInfo?.id;
+
+	// Add context window as first entry if enabled
+	let contextWindowIndex = -1;
+	if (hasContext) {
+		contextWindowIndex = windows.length;
+		windows.push({
+			label: "Ctx",
+			usedPercent: context!.percent,
+		});
+	}
 
 	for (const w of usage.windows) {
 		if (!shouldShowWindow(usage, w, settings, modelInfo)) {
@@ -697,9 +772,23 @@ export function formatUsageStatusWithWidth(
 	const extraParts = extras.map((extra) => applyBaseTextColor(theme, baseTextColor, extra.label));
 
 	const barSpacerWidth = hasBar ? 1 : 0;
-	const baseWindowWidths = windows.map((w) =>
-		visibleWidth(formatUsageWindow(theme, w, invertUsage, settings, usage, { barWidthOverride: 0 })) + barSpacerWidth
-	);
+	const baseWindowWidths = windows.map((w, i) => {
+		// Context window uses false for invertUsage (always show used percentage)
+		const isContext = i === contextWindowIndex;
+		return (
+			visibleWidth(
+				formatUsageWindow(
+					theme,
+					w,
+					isContext ? false : invertUsage,
+					settings,
+					isContext ? undefined : usage,
+					{ barWidthOverride: 0 },
+					modelInfo
+				)
+			) + barSpacerWidth
+		);
+	});
 	const extraWidths = extraParts.map((part) => visibleWidth(part));
 
 	const partCount = windows.length + extraParts.length;
@@ -790,7 +879,18 @@ export function formatUsageStatusWithWidth(
 	for (let i = 0; i < windows.length; i++) {
 		const totalWidth = barWidths[i] ?? barBaseWidthCalc;
 		const contentWidth = containBar ? Math.max(0, totalWidth - barContainerExtra) : totalWidth;
-		parts.push(formatUsageWindow(theme, windows[i], invertUsage, settings, usage, { barWidthOverride: contentWidth }));
+		const isContext = i === contextWindowIndex;
+		parts.push(
+			formatUsageWindow(
+				theme,
+				windows[i],
+				isContext ? false : invertUsage,
+				settings,
+				isContext ? undefined : usage,
+				{ barWidthOverride: contentWidth },
+				modelInfo
+			)
+		);
 	}
 	for (const extra of extraParts) {
 		parts.push(extra);

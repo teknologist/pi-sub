@@ -16,6 +16,7 @@ import { buildDividerLine } from "./src/dividers.js";
 import type { CoreSettings } from "@marckrenn/pi-sub-shared";
 import type { KeyId } from "@mariozechner/pi-tui";
 import { formatUsageStatus, formatUsageStatusWithWidth } from "./src/formatting.js";
+import type { ContextInfo } from "./src/formatting.js";
 import { clearSettingsCache, loadSettings, saveSettings, SETTINGS_PATH } from "./src/settings.js";
 import { showSettingsUI } from "./src/settings-ui.js";
 import { decodeDisplayShareString } from "./src/share.js";
@@ -464,10 +465,76 @@ export default function createExtension(pi: ExtensionAPI) {
 		settingsPoll.unref?.();
 	}
 
+	function formatUsageContent(
+		ctx: ExtensionContext,
+		theme: Theme,
+		usage: UsageSnapshot | undefined,
+		contentWidth: number,
+		message?: string,
+		options?: { forceNoFill?: boolean }
+	): string[] {
+		const paddingLeft = settings.display.paddingLeft ?? 0;
+		const paddingRight = settings.display.paddingRight ?? 0;
+		const innerWidth = Math.max(1, contentWidth - paddingLeft - paddingRight);
+		const alignment = settings.display.alignment ?? "left";
+		const configuredHasFill = settings.display.barWidth === "fill" || settings.display.dividerBlanks === "fill";
+		const hasFill = options?.forceNoFill ? false : configuredHasFill;
+		const wantsSplit = options?.forceNoFill ? false : alignment === "split";
+		const shouldAlign = !hasFill && !wantsSplit && (alignment === "center" || alignment === "right");
+		const baseTextColor = resolveBaseTextColor(settings.display.baseTextColor);
+		const scopedModelPatterns = loadScopedModelPatterns(ctx.cwd);
+		const modelInfo = ctx.model
+			? { provider: ctx.model.provider, id: ctx.model.id, scopedModelPatterns }
+			: { scopedModelPatterns };
+
+		// Get context usage info from pi framework
+		const ctxUsage = ctx.getContextUsage?.();
+		const contextInfo: ContextInfo | undefined = ctxUsage && ctxUsage.contextWindow > 0
+			? { tokens: ctxUsage.tokens, contextWindow: ctxUsage.contextWindow, percent: ctxUsage.percent }
+			: undefined;
+
+		const formatted = message
+			? applyBaseTextColor(theme, baseTextColor, message)
+			: (!usage)
+				? undefined
+				: (hasFill || wantsSplit)
+					? formatUsageStatusWithWidth(theme, usage, innerWidth, modelInfo, settings, { labelGapFill: wantsSplit }, contextInfo)
+					: formatUsageStatus(theme, usage, modelInfo, settings, contextInfo);
+
+		const alignLine = (line: string) => {
+			if (!shouldAlign) return line;
+			const lineWidth = visibleWidth(line);
+			if (lineWidth >= innerWidth) return line;
+			const padding = innerWidth - lineWidth;
+			const leftPad = alignment === "center" ? Math.floor(padding / 2) : padding;
+			return " ".repeat(leftPad) + line;
+		};
+
+		let lines: string[] = [];
+		if (!formatted) {
+			lines = [];
+		} else if (settings.display.overflow === "wrap") {
+			lines = wrapTextWithAnsi(formatted, innerWidth).map(alignLine);
+		} else {
+			const trimmed = alignLine(truncateToWidth(formatted, innerWidth, theme.fg("dim", "...")));
+			lines = [trimmed];
+		}
+
+		if (paddingLeft > 0 || paddingRight > 0) {
+			const leftPad = " ".repeat(paddingLeft);
+			const rightPad = " ".repeat(paddingRight);
+			lines = lines.map((line) => `${leftPad}${line}${rightPad}`);
+		}
+
+		return lines;
+	}
+
 	function renderUsageWidget(ctx: ExtensionContext, usage: UsageSnapshot | undefined, message?: string): void {
 		if (!ctx.hasUI || !uiEnabled) {
 			return;
 		}
+
+
 		if (!usage && !message) {
 			ctx.ui.setWidget("usage", undefined);
 			return;
@@ -479,54 +546,14 @@ export default function createExtension(pi: ExtensionAPI) {
 			(_tui: unknown, theme: Theme) => ({
 				render(width: number) {
 					const safeWidth = Math.max(1, width);
-					const paddingLeft = settings.display.paddingLeft ?? 0;
-					const paddingRight = settings.display.paddingRight ?? 0;
-					const contentWidth = Math.max(1, safeWidth - paddingLeft - paddingRight);
 					const showTopDivider = settings.display.showTopDivider ?? false;
 					const showBottomDivider = settings.display.showBottomDivider ?? true;
 					const dividerChar = settings.display.dividerCharacter ?? "•";
 					const dividerColor: ThemeColor = resolveDividerColor(settings.display.dividerColor);
 					const dividerConnect = settings.display.dividerFooterJoin ?? false;
 					const dividerLine = theme.fg(dividerColor, "─".repeat(safeWidth));
-					const alignment = settings.display.alignment ?? "left";
-					const hasFill = settings.display.barWidth === "fill" || settings.display.dividerBlanks === "fill";
-					const wantsSplit = alignment === "split";
-					const shouldAlign = !hasFill && !wantsSplit && (alignment === "center" || alignment === "right");
-					const baseTextColor = resolveBaseTextColor(settings.display.baseTextColor);
-					const scopedModelPatterns = loadScopedModelPatterns(ctx.cwd);
-					const modelInfo = ctx.model
-						? { provider: ctx.model.provider, id: ctx.model.id, scopedModelPatterns }
-						: { scopedModelPatterns };
-					const formatted = message
-						? applyBaseTextColor(theme, baseTextColor, message)
-						: (hasFill || wantsSplit)
-							? formatUsageStatusWithWidth(theme, usage!, contentWidth, modelInfo, settings, { labelGapFill: wantsSplit })
-							: formatUsageStatus(theme, usage!, modelInfo, settings);
 
-					const alignLine = (line: string) => {
-						if (!shouldAlign) return line;
-						const lineWidth = visibleWidth(line);
-						if (lineWidth >= contentWidth) return line;
-						const padding = contentWidth - lineWidth;
-						const leftPad = alignment === "center" ? Math.floor(padding / 2) : padding;
-						return " ".repeat(leftPad) + line;
-					};
-
-					let lines: string[] = [];
-					if (!formatted) {
-						lines = [];
-					} else if (settings.display.overflow === "wrap") {
-						lines = wrapTextWithAnsi(formatted, contentWidth).map(alignLine);
-					} else {
-						const trimmed = alignLine(truncateToWidth(formatted, contentWidth, theme.fg("dim", "...")));
-						lines = [trimmed];
-					}
-
-					if (paddingLeft > 0 || paddingRight > 0) {
-						const leftPad = " ".repeat(paddingLeft);
-						const rightPad = " ".repeat(paddingRight);
-						lines = lines.map((line) => `${leftPad}${line}${rightPad}`);
-					}
+					let lines = formatUsageContent(ctx, theme, usage, safeWidth, message);
 
 					if (showTopDivider) {
 						const baseLine = lines.length > 0 ? lines[0] : "";
@@ -542,14 +569,14 @@ export default function createExtension(pi: ExtensionAPI) {
 							: dividerLine;
 						lines = [...lines, footerLine];
 					}
+
 					const backgroundColor = resolveBaseTextColor(settings.display.backgroundColor);
 					return applyBackground(lines, theme, backgroundColor, safeWidth);
 				},
 				invalidate() {},
 			}),
-			{ placement: settings.display.widgetPlacement ?? "belowEditor" },
+			{ placement: "belowEditor" },
 		);
-
 	}
 
 	function resolveDisplayedUsage(): UsageSnapshot | undefined {

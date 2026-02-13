@@ -1,5 +1,16 @@
 # @marckrenn/pi-sub-bar
 
+## 1.2.0
+
+### Minor Changes
+
+- Added optional context-window support via `showContextBar` (default: off). When enabled, a `Ctx` bar can appear as the leftmost usage window.
+- Kept model-specific Codex Spark handling behavior.
+
+### Updated dependencies:
+- @marckrenn/pi-sub-core@1.2.0
+- @marckrenn/pi-sub-shared@1.2.0
+
 ## 1.1.0
 
 ### Minor Changes

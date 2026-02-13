@@ -1,5 +1,14 @@
 # @marckrenn/pi-sub-core
 
+## 1.2.0
+
+### Patch Changes
+
+- Fixed tool registration execute signature order for compatibility with the latest Pi tool API.
+
+### Updated dependencies:
+- @marckrenn/pi-sub-shared@1.2.0
+
 ## 1.1.0
 
 ### Patch Changes

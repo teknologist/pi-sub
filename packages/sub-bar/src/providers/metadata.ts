@@ -83,11 +83,42 @@ const antigravityWindowVisible: ProviderMetadata["isWindowVisible"] = (_usage, w
 	return visibility === true;
 };
 
-const codexWindowVisible: ProviderMetadata["isWindowVisible"] = (_usage, window, settings, _model) => {
+const codexWindowVisible: ProviderMetadata["isWindowVisible"] = (_usage, window, settings, model) => {
 	if (!settings) return true;
 	const ps = settings.providers.codex;
-	if (window.label.match(/^\d+h$/)) return ps.windows.showPrimary;
-	if (window.label === "Day" || window.label === "Week") return ps.windows.showSecondary;
+	const isSparkModel = isCodexSparkModel(model);
+	const isSparkWindow = isCodexSparkWindow(window);
+	if (isSparkWindow) {
+		if (!isSparkModel) return false;
+		return shouldShowCodexWindowBySetting(ps, window);
+	}
+	if (isSparkModel) {
+		return false;
+	}
+	return shouldShowCodexWindowBySetting(ps, window);
+};
+
+const isCodexSparkModel = (model?: ModelInfo): boolean => {
+	const tokens = normalizeTokens(model?.id ?? "");
+	return tokens.includes("codex") && tokens.includes("spark");
+};
+
+const isCodexSparkWindow = (window: RateWindow): boolean => {
+	const tokens = normalizeTokens(window.label ?? "");
+	return tokens.includes("codex") && tokens.includes("spark");
+};
+
+const shouldShowCodexWindowBySetting = (
+	ps: Settings["providers"]["codex"],
+	window: RateWindow
+): boolean => {
+	if (window.label === "") return true;
+	if (/\b\d+h$/.test(window.label.trim())) {
+		return ps.windows.showPrimary;
+	}
+	if (window.label === "Day" || window.label === "Week" || /\b(day|week)\b/.test(window.label.toLowerCase())) {
+		return ps.windows.showSecondary;
+	}
 	return true;
 };
 
