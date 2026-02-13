@@ -63,8 +63,27 @@ export function getStatusIcon(
 	return STATUS_ICON_PACKS[pack][status.indicator] ?? "";
 }
 
-export function getStatusLabel(status: ProviderStatus | undefined): string {
+export function getStatusLabel(
+	status: ProviderStatus | undefined,
+	useAbbreviated = false,
+): string {
 	if (!status) return "";
+	if (useAbbreviated) {
+		switch (status.indicator) {
+			case "none":
+				return "Status OK";
+			case "minor":
+				return "Status Degr.";
+			case "major":
+			case "critical":
+				return "Status Crit.";
+			case "maintenance":
+				return "Status Maint.";
+			case "unknown":
+			default:
+				return "Status Unk.";
+		}
+	}
 	if (status.description) return status.description;
 	switch (status.indicator) {
 		case "none":
