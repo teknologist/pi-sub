@@ -635,7 +635,7 @@ export function formatUsageStatus(
 	const modelId = modelInfo?.id;
 
 	// Add context bar as leftmost element if enabled
-	const showContextBar = settings?.display.showContextBar ?? true;
+	const showContextBar = settings?.display.showContextBar ?? false;
 	if (showContextBar && context && context.contextWindow > 0) {
 		parts.push(formatContextBar(theme, context, settings));
 	}
@@ -684,7 +684,7 @@ export function formatUsageStatusWithWidth(
 	const labelGapFill = options?.labelGapFill ?? false;
 	const baseTextColor = resolveBaseTextColor(settings?.display.baseTextColor);
 	const label = formatProviderLabel(theme, usage, settings);
-	const showContextBar = settings?.display.showContextBar ?? true;
+	const showContextBar = settings?.display.showContextBar ?? false;
 	const hasContext = showContextBar && context && context.contextWindow > 0;
 
 	// If no windows, just show the provider name with error

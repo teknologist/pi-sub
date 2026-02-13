@@ -509,7 +509,7 @@ export function getDefaultSettings(): Settings {
 			paddingLeft: 1,
 			paddingRight: 1,
 			widgetPlacement: "belowEditor",
-			showContextBar: true,
+			showContextBar: false,
 			errorThreshold: 25,
 			warningThreshold: 50,
 			overflow: "truncate",
