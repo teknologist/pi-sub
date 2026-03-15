@@ -1,5 +1,13 @@
 # @marckrenn/pi-sub-shared
 
+## 1.4.0
+
+### Minor Changes
+
+- [#51](https://github.com/marckrenn/pi-sub/pull/51) [`477ee48`](https://github.com/marckrenn/pi-sub/commit/477ee480ae1a3841808f1e46b0541e11adcf0651) Thanks [@marckrenn](https://github.com/marckrenn)! - Align `sub-bar`, `sub-core`, and `sub-shared` to `1.4.0` in lockstep.
+
+  No functional changes in this bump; this release normalizes package versions after the previous publish.
+
 ## 1.3.1
 
 ## 1.3.0

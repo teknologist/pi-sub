@@ -1,6 +1,6 @@
 {
   "name": "@marckrenn/pi-sub-bar",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Usage widget extension for pi-coding-agent - shows current provider usage above the editor",
   "keywords": [
     "pi-package"
@@ -30,8 +30,8 @@
     "typescript": "^5.8.0"
   },
   "dependencies": {
-    "@marckrenn/pi-sub-core": "^1.3.1",
-    "@marckrenn/pi-sub-shared": "^1.3.1"
+    "@marckrenn/pi-sub-core": "^1.4.0",
+    "@marckrenn/pi-sub-shared": "^1.4.0"
   },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*"
