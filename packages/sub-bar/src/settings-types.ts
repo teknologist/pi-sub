@@ -581,9 +581,27 @@ export function mergeSettings(loaded: Partial<Settings>): Settings {
 	return deepMerge(getDefaultSettings(), migrated);
 }
 
+const WIDGET_PLACEMENTS = ["aboveEditor", "belowEditor", "status"] as const;
+
+function coerceWidgetPlacement(raw?: unknown): WidgetPlacement | undefined {
+	if (typeof raw !== "string") return undefined;
+	if ((WIDGET_PLACEMENTS as readonly string[]).includes(raw)) {
+		return raw as WidgetPlacement;
+	}
+	return undefined;
+}
+
 function migrateDisplaySettings(display?: Partial<DisplaySettings> | null): void {
 	if (!display) return;
 	const displayAny = display as Partial<DisplaySettings> & { widgetWrapping?: OverflowMode; paddingX?: number };
+	const normalizedPlacement = coerceWidgetPlacement(displayAny.widgetPlacement);
+	if (displayAny.widgetPlacement !== undefined) {
+		displayAny.widgetPlacement = normalizedPlacement ?? "belowEditor";
+	}
+	if (displayAny.widgetPlacement === "status") {
+		displayAny.alignment = "left";
+		displayAny.overflow = "truncate";
+	}
 	if (displayAny.widgetWrapping !== undefined && displayAny.overflow === undefined) {
 		displayAny.overflow = displayAny.widgetWrapping;
 	}

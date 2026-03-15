@@ -471,13 +471,17 @@ export default function createExtension(pi: ExtensionAPI) {
 		usage: UsageSnapshot | undefined,
 		contentWidth: number,
 		message?: string,
-		options?: { forceNoFill?: boolean; forceLeftAlignment?: boolean }
+		options?: { forceNoFill?: boolean; forceLeftAlignment?: boolean; forceOverflow?: "truncate" | "wrap"; useStatusSafePadding?: boolean }
 	): string[] {
 		const paddingLeft = settings.display.paddingLeft ?? 0;
-		const paddingRight = settings.display.paddingRight ?? 0;
-		const innerWidth = Math.max(1, contentWidth - paddingLeft - paddingRight);
+		const configuredPaddingRight = settings.display.paddingRight ?? 0;
+		const useStatusSafePadding = options?.useStatusSafePadding ?? false;
+		const resolvedPaddingRight = useStatusSafePadding ? 0 : configuredPaddingRight;
+		const innerWidth = Math.max(1, contentWidth - paddingLeft - resolvedPaddingRight);
 		const configuredAlignment = settings.display.alignment ?? "left";
 		const alignment = options?.forceLeftAlignment ? "left" : configuredAlignment;
+		const configuredOverflow = settings.display.overflow ?? "truncate";
+		const overflow = options?.forceOverflow ?? configuredOverflow;
 		const configuredHasFill = settings.display.barWidth === "fill" || settings.display.dividerBlanks === "fill";
 		const hasFill = options?.forceNoFill ? false : configuredHasFill;
 		const wantsSplit = options?.forceNoFill ? false : alignment === "split";
@@ -514,16 +518,35 @@ export default function createExtension(pi: ExtensionAPI) {
 		let lines: string[] = [];
 		if (!formatted) {
 			lines = [];
-		} else if (settings.display.overflow === "wrap") {
+		} else if (overflow === "wrap") {
 			lines = wrapTextWithAnsi(formatted, innerWidth).map(alignLine);
 		} else {
 			const trimmed = alignLine(truncateToWidth(formatted, innerWidth, theme.fg("dim", "...")));
 			lines = [trimmed];
 		}
 
-		if (paddingLeft > 0 || paddingRight > 0) {
-			const leftPad = " ".repeat(paddingLeft);
-			const rightPad = " ".repeat(paddingRight);
+		const effectivePaddingLeft = paddingLeft;
+		const effectivePaddingRight = useStatusSafePadding ? 0 : configuredPaddingRight;
+		if (effectivePaddingLeft > 0 || effectivePaddingRight > 0) {
+			const buildStatusSafePadding = (count: number) => {
+				const zeroWidth = "\u200B";
+				if (count <= 0) return "";
+				let out = "";
+				for (let i = 0; i < count; i++) {
+					out += " ";
+					out += zeroWidth;
+				}
+				if (count > 0) {
+					out += zeroWidth;
+				}
+				return out;
+			};
+			const leftPad = useStatusSafePadding
+				? buildStatusSafePadding(effectivePaddingLeft)
+				: " ".repeat(effectivePaddingLeft);
+			const rightPad = useStatusSafePadding
+				? ""
+				: " ".repeat(effectivePaddingRight);
 			lines = lines.map((line) => `${leftPad}${line}${rightPad}`);
 		}
 
@@ -563,6 +586,8 @@ export default function createExtension(pi: ExtensionAPI) {
 			const lines = formatUsageContent(ctx, theme, usage, terminalWidth, message, {
 				forceNoFill: true,
 				forceLeftAlignment: true,
+				forceOverflow: "truncate",
+				useStatusSafePadding: true,
 			});
 			if (lines.length === 0) {
 				ctx.ui.setStatus("sub-bar", "");

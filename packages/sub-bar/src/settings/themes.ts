@@ -116,6 +116,12 @@ export function buildDisplayThemeItems(
 		description: "compact display",
 		tooltip: "Apply the default minimal theme.",
 	});
+	items.push({
+		value: "default-footer",
+		label: "Default Footer",
+		description: "status-line optimized default footer style",
+		tooltip: "Apply a compact footer-style layout.",
+	});
 	for (const theme of settings.displayThemes) {
 		const description = theme.source === "imported" ? "manually imported theme" : "manually saved theme";
 		items.push({
@@ -140,6 +146,23 @@ export function resolveDisplayThemeTarget(
 	}
 	if (value === "default") {
 		return { name: "Default", display: { ...defaults.display }, deletable: false };
+	}
+	if (value === "default-footer") {
+		return {
+			name: "Default Footer",
+			display: {
+				...defaults.display,
+				alignment: "left",
+				barWidth: 4,
+				showUsageLabels: false,
+				statusIndicatorMode: "icon+text",
+				statusProviderDivider: true,
+				showProviderName: false,
+				statusLeadingDivider: true,
+				widgetPlacement: "status",
+			},
+			deletable: false,
+		};
 	}
 	if (value === "minimal") {
 		return {

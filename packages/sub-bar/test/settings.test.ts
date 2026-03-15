@@ -10,8 +10,8 @@ import {
 	buildDisplayDividerItems,
 	buildDisplayLayoutItems,
 } from "../src/settings/display.js";
-import { buildDisplayThemeItems, saveDisplayTheme, upsertDisplayTheme } from "../src/settings/themes.js";
-import { getDefaultSettings, resolveBaseTextColor } from "../src/settings-types.js";
+import { buildDisplayThemeItems, resolveDisplayThemeTarget, saveDisplayTheme, upsertDisplayTheme } from "../src/settings/themes.js";
+import { getDefaultSettings, mergeSettings, resolveBaseTextColor } from "../src/settings-types.js";
 import type { UsageSnapshot } from "../src/types.js";
 
 const theme = {
@@ -109,6 +109,14 @@ test("share string preserves custom values and tolerates unknown colors", () => 
 	assert.equal(decoded?.display.providerLabel, "Team");
 	assert.equal(decoded?.display.barCharacter, "★");
 	assert.equal(resolveBaseTextColor(decoded?.display.baseTextColor), "dim");
+});
+
+
+
+test("theme list includes Default Footer preset", () => {
+	const items = buildDisplayThemeItems(getDefaultSettings());
+	const footerThemeItem = items.find((item) => item.value === "default-footer");
+	assert.equal(footerThemeItem?.label, "Default Footer");
 });
 
 test("theme source labels imported vs saved", () => {
@@ -213,7 +221,7 @@ test("applyDisplayChange accepts custom reset containment", () => {
 	assert.equal(settings.display.resetTimeContainment, "{}");
 });
 
-test("layout items expose aboveEditor and clamp status alignment choices", () => {
+test("layout items expose aboveEditor and hide status-only layout controls", () => {
 	const settings = getDefaultSettings();
 
 	let items = buildDisplayLayoutItems(settings);
@@ -222,9 +230,10 @@ test("layout items expose aboveEditor and clamp status alignment choices", () =>
 
 	settings.display.widgetPlacement = "status";
 	items = buildDisplayLayoutItems(settings);
-	const alignmentItem = items.find((item) => item.id === "alignment");
-	assert.deepEqual(alignmentItem?.values, ["left"]);
-	assert.equal(alignmentItem?.currentValue, "left");
+	assert.ok(!items.some((item) => item.id === "alignment"));
+	assert.ok(!items.some((item) => item.id === "overflow"));
+	assert.ok(items.some((item) => item.id === "paddingLeft"));
+	assert.ok(!items.some((item) => item.id === "paddingRight"));
 });
 
 test("status placement hides fill width option", () => {
@@ -259,6 +268,47 @@ test("applyDisplayChange toggles status edge dividers", () => {
 	applyDisplayChange(settings, "statusTrailingDivider", "on");
 	assert.equal(settings.display.statusLeadingDivider, true);
 	assert.equal(settings.display.statusTrailingDivider, true);
+});
+
+
+
+
+
+test("Default Footer preset applies footer defaults", () => {
+	const defaults = getDefaultSettings();
+	const target = resolveDisplayThemeTarget("default-footer", defaults, defaults, null);
+	assert.ok(target);
+	assert.equal(target?.name, "Default Footer");
+	assert.equal(target?.display.widgetPlacement, "status");
+	assert.equal(target?.display.statusIndicatorMode, "icon+text");
+	assert.equal(target?.display.barWidth, 4);
+	assert.equal(target?.deletable, false);
+});
+test("default widget placement stays belowEditor", () => {
+	const settings = getDefaultSettings();
+	assert.equal(settings.display.widgetPlacement, "belowEditor");
+});
+
+test("status placement normalizes alignment and overflow to line-mode defaults", () => {
+	const settings = mergeSettings({
+		display: {
+			widgetPlacement: "status",
+			alignment: "center",
+			overflow: "wrap",
+		} as any,
+	} as any);
+	assert.equal(settings.display.widgetPlacement, "status");
+	assert.equal(settings.display.alignment, "left");
+	assert.equal(settings.display.overflow, "truncate");
+});
+
+test("invalid widget placement falls back to belowEditor", () => {
+	const settings = mergeSettings({
+		display: {
+			widgetPlacement: "invalid",
+		} as any,
+	} as any);
+	assert.equal(settings.display.widgetPlacement, "belowEditor");
 });
 
 test("decodeDisplayShareString rejects invalid payloads", () => {

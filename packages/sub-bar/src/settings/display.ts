@@ -38,7 +38,7 @@ function isStatusLinePlacement(settings: Settings): boolean {
 
 export function buildDisplayLayoutItems(settings: Settings): SettingItem[] {
 	const statusPlacement = isStatusLinePlacement(settings);
-	return [
+	const items: SettingItem[] = [
 		{
 			id: "widgetPlacement",
 			label: "Widget Placement",
@@ -53,39 +53,48 @@ export function buildDisplayLayoutItems(settings: Settings): SettingItem[] {
 			values: ["on", "off"],
 			description: "Show context window usage as leftmost progress bar.",
 		},
-		{
-			id: "alignment",
-			label: "Alignment",
-			currentValue: statusPlacement ? "left" : settings.display.alignment,
-			values: statusPlacement
-				? (["left"] as DisplayAlignment[])
-				: (["left", "center", "right", "split"] as DisplayAlignment[]),
-			description: statusPlacement
-				? "Status-line placement always uses left alignment."
-				: "Align the usage line inside the widget.",
-		},
-		{
-			id: "overflow",
-			label: "Overflow",
-			currentValue: settings.display.overflow,
-			values: ["truncate", "wrap"] as WidgetWrapping[],
-			description: "Wrap the usage line or truncate with ellipsis (requires bar width ≠ fill and alignment ≠ split).",
-		},
-		{
-			id: "paddingLeft",
-			label: "Padding Left",
-			currentValue: String(settings.display.paddingLeft ?? 0),
-			values: ["0", "1", "2", "3", "4", CUSTOM_OPTION],
-			description: "Add left padding inside the widget.",
-		},
-		{
+	];
+
+	if (!statusPlacement) {
+		items.push(
+			{
+				id: "alignment",
+				label: "Alignment",
+				currentValue: settings.display.alignment,
+				values: ["left", "center", "right", "split"] as DisplayAlignment[],
+				description: "Align the usage line inside the widget.",
+			},
+			{
+				id: "overflow",
+				label: "Overflow",
+				currentValue: settings.display.overflow,
+				values: ["truncate", "wrap"] as WidgetWrapping[],
+				description: "Wrap the usage line or truncate with ellipsis (requires bar width ≠ fill and alignment ≠ split).",
+			},
+		);
+	}
+
+	items.push({
+		id: "paddingLeft",
+		label: "Padding Left",
+		currentValue: String(settings.display.paddingLeft ?? 0),
+		values: ["0", "1", "2", "3", "4", CUSTOM_OPTION],
+		description: statusPlacement
+			? "Add left padding inside the compact status line."
+			: "Add left padding inside the widget.",
+	});
+
+	if (!statusPlacement) {
+		items.push({
 			id: "paddingRight",
 			label: "Padding Right",
 			currentValue: String(settings.display.paddingRight ?? 0),
 			values: ["0", "1", "2", "3", "4", CUSTOM_OPTION],
 			description: "Add right padding inside the widget.",
-		},
-	];
+		});
+	}
+
+	return items;
 }
 
 export function buildDisplayResetItems(settings: Settings): SettingItem[] {
