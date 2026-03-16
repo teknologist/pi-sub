@@ -13,6 +13,7 @@ import { createUsageController, type UsageUpdate } from "./src/usage/controller.
 import { fetchUsageEntries, getCachedUsageEntries } from "./src/usage/fetch.js";
 import { onCacheSnapshot, onCacheUpdate, watchCacheUpdates, type Cache } from "./src/cache.js";
 import { isExpectedMissingData } from "./src/errors.js";
+import { prioritizeWindowsForModel } from "./src/utils.js";
 import { getStorage } from "./src/storage.js";
 import { clearSettingsCache, loadSettings, saveSettings, SETTINGS_PATH } from "./src/settings.js";
 import { showSettingsUI } from "./src/settings-ui.js";
@@ -108,7 +109,11 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 	let lastCurrentSnapshot = "";
 
 	const emitCurrentUpdate = (provider?: ProviderName, usage?: UsageSnapshot): void => {
-		lastState = { provider, usage };
+		const model = lastContext?.model;
+		const sorted = usage && model
+			? { ...usage, windows: prioritizeWindowsForModel(usage.windows, model) }
+			: usage;
+		lastState = { provider, usage: sorted };
 		const payload = JSON.stringify(lastState);
 		if (payload === lastCurrentSnapshot) return;
 		lastCurrentSnapshot = payload;

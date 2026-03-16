@@ -2,7 +2,7 @@
  * Utility functions for the sub-bar extension
  */
 
-import type { Dependencies } from "./types.js";
+import type { Dependencies, RateWindow } from "./types.js";
 import { MODEL_MULTIPLIERS } from "./config.js";
 
 // Only allow simple CLI names (no spaces/paths) to avoid unsafe command execution.
@@ -63,6 +63,42 @@ export function normalizeTokens(value: string): string[] {
 		.trim()
 		.split(" ")
 		.filter(Boolean);
+}
+
+/**
+ * Reorder usage windows so those matching the active model come first.
+ * A window matches when every model-ID token appears in the window label
+ * AND the model tokens form a strict majority of the label tokens.
+ * The majority check prevents a short model name (e.g. "gpt-5.3") from
+ * falsely matching a longer, more specific label (e.g. "GPT-5.3-Codex-Spark 5h").
+ * Non-matching windows keep their original relative order.
+ */
+export function prioritizeWindowsForModel(
+	windows: RateWindow[],
+	model?: { id?: string } | null,
+): RateWindow[] {
+	if (!model?.id || windows.length <= 1) return windows;
+
+	const modelTokens = normalizeTokens(model.id);
+	if (modelTokens.length === 0) return windows;
+
+	const matched: RateWindow[] = [];
+	const rest: RateWindow[] = [];
+
+	for (const window of windows) {
+		const labelTokens = normalizeTokens(window.label);
+		const isMatch = modelTokens.every((token) => labelTokens.includes(token))
+			&& modelTokens.length * 2 > labelTokens.length;
+		if (isMatch) {
+			matched.push(window);
+		} else {
+			rest.push(window);
+		}
+	}
+
+	if (matched.length === 0 || matched.length === windows.length) return windows;
+
+	return [...matched, ...rest];
 }
 
 // Pre-computed token entries for model multiplier matching
