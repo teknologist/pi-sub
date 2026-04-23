@@ -228,6 +228,47 @@ test("clears the status when current state becomes unusable and on session shutd
 	]);
 });
 
+test("swallows stale-context errors during shutdown clear", async () => {
+	const pi = createFakePi();
+	const staleCtx = {
+		ui: {
+			select: async () => undefined,
+			confirm: async () => false,
+			input: async () => undefined,
+			notify: () => {},
+			setStatus: () => {
+				throw new Error(
+					"This extension instance is stale after session replacement or reload. Use the provided replacement-session context instead.",
+				);
+			},
+			setWorkingMessage: () => {},
+			setWidget: () => {},
+			setFooter: () => {},
+			setHeader: () => {},
+			setTitle: () => {},
+			custom: async () => undefined,
+			setEditorText: () => {},
+		},
+		hasUI: true,
+		cwd: "/tmp/project",
+		sessionManager: {} as ExtensionContext["sessionManager"],
+		modelRegistry: {} as ExtensionContext["modelRegistry"],
+		model: undefined,
+		isIdle: () => true,
+		abort: () => {},
+		hasPendingMessages: () => false,
+		shutdown: () => {},
+		getContextUsage: () => undefined,
+		compact: () => {},
+		getSystemPrompt: () => "",
+	} as ExtensionContext;
+	registerCurrentStateReply(pi, { usage: buildUsage() });
+
+	createStatusRuntime(pi);
+	await pi.emitEvent("session_start", staleCtx);
+	await assert.doesNotReject(() => pi.emitEvent("session_shutdown", staleCtx));
+});
+
 test("keeps a newer sub-core ready update when the startup request replies later with stale state", async () => {
 	const pi = createFakePi();
 	const { ctx, statusCalls, waitForStatusCalls } = createContext();

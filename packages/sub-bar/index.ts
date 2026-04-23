@@ -40,6 +40,21 @@ type SubCoreAction = {
 	force?: boolean;
 };
 
+type UsageRenderContext = {
+	cwd?: string;
+	model?: ExtensionContext["model"];
+	contextUsage?: ReturnType<ExtensionContext["getContextUsage"]>;
+};
+
+function isStaleContextError(error: unknown): boolean {
+	return (
+		error instanceof Error &&
+		error.message.includes(
+			"This extension instance is stale after session replacement or reload",
+		)
+	);
+}
+
 function applyBackground(lines: string[], theme: Theme, color: WidgetBackgroundColor, width: number): string[] {
 	if (color === "none") return lines;
 	const bgAnsi = isBackgroundColor(color)
@@ -142,6 +157,36 @@ export default function createExtension(pi: ExtensionAPI) {
 	let settingsMtimeMs = 0;
 	let settingsWatchStarted = false;
 	let subCoreBootstrapAttempted = false;
+
+	function abandonContext(ctx: ExtensionContext): void {
+		if (lastContext === ctx) {
+			lastContext = undefined;
+		}
+	}
+
+	function withLiveContext<T>(ctx: ExtensionContext, action: () => T, fallback: T): T {
+		try {
+			return action();
+		} catch (error) {
+			if (isStaleContextError(error)) {
+				abandonContext(ctx);
+				return fallback;
+			}
+			throw error;
+		}
+	}
+
+	function snapshotRenderContext(ctx: ExtensionContext): UsageRenderContext | undefined {
+		return withLiveContext(
+			ctx,
+			() => ({
+				cwd: ctx.cwd,
+				model: ctx.model,
+				contextUsage: ctx.getContextUsage?.(),
+			}),
+			undefined,
+		);
+	}
 
 	async function probeSubCore(timeoutMs = 200): Promise<boolean> {
 		return new Promise((resolve) => {
@@ -467,7 +512,7 @@ export default function createExtension(pi: ExtensionAPI) {
 	}
 
 	function formatUsageContent(
-		ctx: ExtensionContext,
+		renderContext: UsageRenderContext | undefined,
 		theme: Theme,
 		usage: UsageSnapshot | undefined,
 		contentWidth: number,
@@ -488,13 +533,13 @@ export default function createExtension(pi: ExtensionAPI) {
 		const wantsSplit = options?.forceNoFill ? false : alignment === "split";
 		const shouldAlign = !hasFill && !wantsSplit && (alignment === "center" || alignment === "right");
 		const baseTextColor = resolveBaseTextColor(settings.display.baseTextColor);
-		const scopedModelPatterns = loadScopedModelPatterns(ctx.cwd);
-		const modelInfo = ctx.model
-			? { provider: ctx.model.provider, id: ctx.model.id, scopedModelPatterns }
+		const scopedModelPatterns = renderContext?.cwd ? loadScopedModelPatterns(renderContext.cwd) : [];
+		const modelInfo = renderContext?.model
+			? { provider: renderContext.model.provider, id: renderContext.model.id, scopedModelPatterns }
 			: { scopedModelPatterns };
 
 		// Get context usage info from pi framework
-		const ctxUsage = ctx.getContextUsage?.();
+		const ctxUsage = renderContext?.contextUsage;
 		const contextInfo: ContextInfo | undefined = ctxUsage && ctxUsage.contextWindow > 0
 			? { tokens: ctxUsage.tokens, contextWindow: ctxUsage.contextWindow, percent: ctxUsage.percent }
 			: undefined;
@@ -566,32 +611,37 @@ export default function createExtension(pi: ExtensionAPI) {
 	}
 
 	function renderUsageWidget(ctx: ExtensionContext, usage: UsageSnapshot | undefined, message?: string): void {
-		if (!ctx.hasUI || !uiEnabled) {
+		if (!uiEnabled || !withLiveContext(ctx, () => ctx.hasUI, false)) {
+			return;
+		}
+		const renderContext = snapshotRenderContext(ctx);
+		if (!renderContext) {
 			return;
 		}
 
 		const placement = settings.display.widgetPlacement ?? "belowEditor";
 
 		if (placement === "status") {
-			ctx.ui.setWidget("usage", undefined);
+			withLiveContext(ctx, () => ctx.ui.setWidget("usage", undefined), undefined);
 			if (!usage && !message) {
-				ctx.ui.setStatus("sub-bar", "");
+				withLiveContext(ctx, () => ctx.ui.setStatus("sub-bar", ""), undefined);
 				return;
 			}
-			const theme = ctx.ui.theme;
+			const theme = withLiveContext(ctx, () => ctx.ui.theme, undefined);
+			if (!theme) return;
 			const terminalWidth = process.stdout.columns || 80;
 			// In status-line placement we must not use fill-based layouts (they assume full terminal width).
 			// The Pi footer concatenates *all* extension statuses onto one line and then truncates,
 			// so we render at natural width here to avoid padding that would overflow when other
 			// status hooks are present.
-			const lines = formatUsageContent(ctx, theme, usage, terminalWidth, message, {
+			const lines = formatUsageContent(renderContext, theme, usage, terminalWidth, message, {
 				forceNoFill: true,
 				forceLeftAlignment: true,
 				forceOverflow: "truncate",
 				useStatusSafePadding: true,
 			});
 			if (lines.length === 0) {
-				ctx.ui.setStatus("sub-bar", "");
+				withLiveContext(ctx, () => ctx.ui.setStatus("sub-bar", ""), undefined);
 				return;
 			}
 			let statusLine = lines.join(" ");
@@ -604,18 +654,27 @@ export default function createExtension(pi: ExtensionAPI) {
 					statusLine = `${statusLine}${edgeDivider}`;
 				}
 			}
-			ctx.ui.setStatus("sub-bar", truncateToWidth(statusLine, terminalWidth, theme.fg("dim", "...")));
+			withLiveContext(
+				ctx,
+				() => ctx.ui.setStatus("sub-bar", truncateToWidth(statusLine, terminalWidth, theme.fg("dim", "..."))),
+				undefined,
+			);
 			return;
 		}
 
-		ctx.ui.setStatus("sub-bar", "");
+		withLiveContext(ctx, () => ctx.ui.setStatus("sub-bar", ""), undefined);
 		if (!usage && !message) {
-			ctx.ui.setWidget("usage", undefined);
+			withLiveContext(ctx, () => ctx.ui.setWidget("usage", undefined), undefined);
 			return;
 		}
 
 		const widgetPlacement = placement === "aboveEditor" ? "aboveEditor" : "belowEditor";
-		const setWidgetWithPlacement = (ctx.ui as unknown as { setWidget: (...args: unknown[]) => void }).setWidget;
+		const setWidgetWithPlacement = withLiveContext(
+			ctx,
+			() => (ctx.ui as unknown as { setWidget: (...args: unknown[]) => void }).setWidget,
+			undefined,
+		);
+		if (!setWidgetWithPlacement) return;
 		setWidgetWithPlacement(
 			"usage",
 			(_tui: unknown, theme: Theme) => ({
@@ -628,7 +687,7 @@ export default function createExtension(pi: ExtensionAPI) {
 					const dividerConnect = settings.display.dividerFooterJoin ?? false;
 					const dividerLine = theme.fg(dividerColor, "─".repeat(safeWidth));
 
-					let lines = formatUsageContent(ctx, theme, usage, safeWidth, message);
+					let lines = formatUsageContent(renderContext, theme, usage, safeWidth, message);
 
 					if (showTopDivider) {
 						const baseLine = lines.length > 0 ? lines[0] : "";
@@ -1036,7 +1095,7 @@ export default function createExtension(pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		lastContext = ctx;
-		uiEnabled = ctx.hasUI;
+		uiEnabled = withLiveContext(ctx, () => ctx.hasUI, false);
 		if (!uiEnabled) {
 			return;
 		}
@@ -1084,7 +1143,7 @@ export default function createExtension(pi: ExtensionAPI) {
 
 	pi.on("model_select" as unknown as "session_start", async (_event: unknown, ctx: ExtensionContext) => {
 		lastContext = ctx;
-		if (!uiEnabled || !ctx.hasUI) {
+		if (!uiEnabled || !withLiveContext(ctx, () => ctx.hasUI, false)) {
 			return;
 		}
 		if (currentUsage) {

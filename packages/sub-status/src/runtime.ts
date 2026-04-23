@@ -22,6 +22,15 @@ export type RuntimeDependencies = {
 	logWarning?: (message: string, error: unknown) => void;
 };
 
+function isStaleContextError(error: unknown): boolean {
+	return (
+		error instanceof Error &&
+		error.message.includes(
+			"This extension instance is stale after session replacement or reload",
+		)
+	);
+}
+
 function resolveTimeout(value: number | undefined, fallback: number): number {
 	return value ?? fallback;
 }
@@ -108,12 +117,30 @@ export function createStatusRuntime(pi: ExtensionAPI, dependencies: RuntimeDepen
 	const importModule = dependencies.importModule ?? ((specifier: string) => import(specifier));
 	const logWarning = dependencies.logWarning ?? ((message: string, error: unknown) => console.warn(`${message}:`, error));
 
+	function abandonContext(ctx: ExtensionContext): void {
+		if (lastContext === ctx) {
+			lastContext = undefined;
+		}
+	}
+
+	function withLiveContext<T>(ctx: ExtensionContext, action: () => T, fallback: T): T {
+		try {
+			return action();
+		} catch (error) {
+			if (isStaleContextError(error)) {
+				abandonContext(ctx);
+				return fallback;
+			}
+			throw error;
+		}
+	}
+
 	function renderStatus(ctx: ExtensionContext, state: SubCoreState | undefined): void {
 		const nextStatus = formatCompactStatus(state?.usage);
 		if (nextStatus === lastRenderedStatus) {
 			return;
 		}
-		ctx.ui.setStatus(STATUS_KEY, nextStatus);
+		withLiveContext(ctx, () => ctx.ui.setStatus(STATUS_KEY, nextStatus), undefined);
 		lastRenderedStatus = nextStatus;
 	}
 
