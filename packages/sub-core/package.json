@@ -27,9 +27,10 @@
     "typescript": "^5.8.0"
   },
   "dependencies": {
-    "@marckrenn/pi-sub-shared": "^1.5.0"
+    "@marckrenn/pi-sub-shared": "^1.5.0",
+    "typebox": "^1.1.37"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*"
+    "@mariozechner/pi-coding-agent": "^0.72.1"
   }
 }

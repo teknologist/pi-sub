@@ -3,7 +3,7 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import * as fs from "node:fs";
 import type { Dependencies, ProviderName, SubCoreState, UsageSnapshot } from "./src/types.js";
 import { getDefaultSettings, type Settings } from "./src/settings-types.js";
@@ -456,11 +456,20 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 		}
 	});
 
-	pi.on("session_start", async (_event, ctx) => {
+	pi.on("session_start", async (event, ctx) => {
 		lastContext = ctx;
 		ensureSettingsLoaded();
-		void refresh(ctx, { allowStaleCache: true, skipFetch: true });
-		void refreshStatus(ctx, { allowStaleCache: true, skipFetch: true });
+
+		if (event.reason === "new" || event.reason === "resume" || event.reason === "fork") {
+			controllerState.currentProvider = undefined;
+			controllerState.cachedUsage = undefined;
+			await refresh(ctx);
+			await refreshStatus(ctx);
+		} else {
+			void refresh(ctx, { allowStaleCache: true, skipFetch: true });
+			void refreshStatus(ctx, { allowStaleCache: true, skipFetch: true });
+		}
+
 		pi.events.emit("sub-core:ready", { state: lastState, settings });
 	});
 
@@ -486,19 +495,6 @@ export default function createExtension(pi: ExtensionAPI, deps: Dependencies = c
 		await refresh(ctx, { force: true });
 	});
 
-	pi.on("session_switch", async (_event, ctx) => {
-		controllerState.currentProvider = undefined;
-		controllerState.cachedUsage = undefined;
-		await refresh(ctx);
-		await refreshStatus(ctx);
-	});
-
-	pi.on("session_branch" as unknown as "session_start", async (_event: unknown, ctx: ExtensionContext) => {
-		controllerState.currentProvider = undefined;
-		controllerState.cachedUsage = undefined;
-		await refresh(ctx);
-		await refreshStatus(ctx);
-	});
 
 	pi.on("model_select" as unknown as "session_start", async (_event: unknown, ctx: ExtensionContext) => {
 		controllerState.currentProvider = undefined;

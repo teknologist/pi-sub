@@ -540,9 +540,10 @@ export default function createExtension(pi: ExtensionAPI) {
 
 		// Get context usage info from pi framework
 		const ctxUsage = renderContext?.contextUsage;
-		const contextInfo: ContextInfo | undefined = ctxUsage && ctxUsage.contextWindow > 0
-			? { tokens: ctxUsage.tokens, contextWindow: ctxUsage.contextWindow, percent: ctxUsage.percent }
-			: undefined;
+		const contextInfo: ContextInfo | undefined =
+			ctxUsage && ctxUsage.contextWindow > 0 && ctxUsage.tokens !== null && ctxUsage.percent !== null
+				? { tokens: ctxUsage.tokens, contextWindow: ctxUsage.contextWindow, percent: ctxUsage.percent }
+				: undefined;
 
 		const formatted = message
 			? applyBaseTextColor(theme, baseTextColor, message)
