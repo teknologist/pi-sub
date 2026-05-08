@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "pi": {
     "extensions": [
       "packages/sub-core/index.ts",
@@ -11,7 +13,9 @@
       "packages/sub-status/index.ts"
     ]
   },
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "clean": "npm run clean --workspaces --if-present",
     "check": "npm run check --workspaces --if-present",
@@ -29,7 +33,7 @@
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.0",
     "@changesets/cli": "^2.27.9",
-    "@mariozechner/pi-coding-agent": "^0.72.1",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",

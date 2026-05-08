@@ -31,6 +31,6 @@
     "typebox": "^1.1.37"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "^0.72.1"
+    "@earendil-works/pi-coding-agent": "^0.74.0"
   }
 }

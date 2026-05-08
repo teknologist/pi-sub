@@ -2,7 +2,7 @@
  * sub-core - Shared usage data core for sub-* extensions.
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import * as fs from "node:fs";
 import type { Dependencies, ProviderName, SubCoreState, UsageSnapshot } from "./src/types.js";
